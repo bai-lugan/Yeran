@@ -1,0 +1,90 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Yeran",
+  "version": "1.0.0",
+  "identifier": "com.yeran.editor",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "页然 · Yeran",
+        "width": 1280,
+        "height": 900,
+        "minWidth": 740,
+        "minHeight": 560,
+        "center": true,
+        "backgroundColor": "#eef0f3"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: http://asset.localhost data: blob: https:; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost https:; font-src 'self' data:; object-src 'none'; base-uri 'self'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "**"
+        ]
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "publisher": "Yeran",
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "shortDescription": "在 A4 页面上直接编辑 Markdown",
+    "fileAssociations": [
+      {
+        "ext": [
+          "md",
+          "markdown"
+        ],
+        "name": "Yeran.Markdown",
+        "description": "Markdown 文稿",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "textpack",
+          "tetpack"
+        ],
+        "name": "Yeran.TextPack",
+        "description": "TextPack 文稿（包含图片）",
+        "role": "Editor"
+      },
+      {
+        "ext": [
+          "txt"
+        ],
+        "name": "Yeran.Text",
+        "description": "纯文本文稿",
+        "role": "Editor"
+      }
+    ],
+    "windows": {
+      "nsis": {
+        "displayLanguageSelector": false,
+        "languages": [
+          "SimpChinese"
+        ]
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      }
+    },
+    "resources": {
+      "../LICENSE": "licenses/LICENSE.txt",
+      "../release/THIRD_PARTY_NOTICES.txt": "licenses/THIRD_PARTY_NOTICES.txt",
+      "../third-party/RUST_THIRD_PARTY_NOTICES.txt": "licenses/RUST_THIRD_PARTY_NOTICES.txt",
+      "../third-party/mpl-sources.zip": "licenses/mpl-sources.zip"
+    }
+  }
+}
