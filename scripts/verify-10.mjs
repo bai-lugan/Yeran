@@ -1,0 +1,14 @@
+import {chromium} from '@playwright/test'
+import assert from 'node:assert/strict'
+import {mkdir,writeFile} from 'node:fs/promises'
+const out='.oil-ui/yeran-10-dev';await mkdir(out,{recursive:true});const browser=await chromium.launch({channel:'msedge',headless:true}),page=await browser.newPage({viewport:{width:1280,height:900}}),results=[],errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());const test=async(name,fn)=>{await fn();results.push(name);console.log('PASS '+name)}
+try{
+ await page.goto(process.env.YERAN_TEST_URL||'http://127.0.0.1:4173');await page.waitForFunction(()=>window.__yeran)
+ await test('Open Editors plus creates Markdown and top-tab F2 names it without changing the document',async()=>{
+  const count=await page.getByRole('tab').count();await page.getByRole('button',{name:'新建未命名文件',exact:true}).click();await page.waitForFunction(count=>document.querySelectorAll('.document-tab').length===count+1,count);await page.locator('.paper-editor > p').first().click();await page.keyboard.type('Keep unsaved text');await page.getByRole('tab').filter({hasText:'未命名'}).focus();await page.keyboard.press('F2');const input=page.getByLabel('新的文件名称',{exact:true});await input.fill('Draft.md');await input.press('Enter');await input.waitFor({state:'detached'});assert.equal(await page.locator('.document-tab.active').getAttribute('title'),'Draft.md');assert.equal(await page.evaluate(()=>window.__yeran.getMarkdown()),'Keep unsaved text');assert.equal(await page.evaluate(()=>window.__yeran.tabs.value.find(t=>t.id===window.__yeran.activeId.value).path),null)
+ })
+ await test('untitled plain filenames remain literal across language switching and recovery',async()=>{
+  await page.getByRole('button',{name:'更多文件操作',exact:true}).click();await page.getByRole('menuitem',{name:'新建纯文本',exact:true}).click();await page.locator('.plain-line').first().click();await page.keyboard.type('# raw');await page.keyboard.press('F2');await page.getByLabel('新的文件名称',{exact:true}).fill('纯文本');await page.getByLabel('新的文件名称',{exact:true}).press('Enter');await page.getByLabel('界面语言').selectOption('en');assert.equal(await page.locator('.document-tab.active').getAttribute('title'),'纯文本');assert.equal(await page.locator('.plain-mode-label').innerText(),'Plain text');await page.reload();await page.waitForFunction(()=>window.__yeran);assert.equal(await page.locator('.document-tab.active').getAttribute('title'),'纯文本');assert.equal(await page.evaluate(()=>window.__yeran.getMarkdown()),'# raw');await page.screenshot({path:out+'/literal-name-en.png'})
+ })
+ assert.deepEqual(errors,[]);await writeFile(out+'/verification-browser.json',JSON.stringify({passed:results.length,results,errors},null,2))
+}catch(e){await page.screenshot({path:out+'/failure-browser.png'});throw e}finally{await browser.close()}
