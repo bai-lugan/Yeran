@@ -1,0 +1,15 @@
+node_modules/
+dist/
+src-tauri/target/
+.tools/
+*.log
+test-results/
+.oil-ui/
+src-tauri/gen/
+release/*
+!release/README.md
+!release/VALIDATION.md
+!release/THIRD_PARTY_NOTICES.txt
+.env
+.env.*
+scripts/probe-*
