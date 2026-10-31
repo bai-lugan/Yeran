@@ -1,0 +1,13 @@
+{
+  "identifier": "default",
+  "description": "Local document editing",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "core:window:allow-destroy",
+    "dialog:default",
+    "opener:default"
+  ]
+}
