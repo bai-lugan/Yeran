@@ -207,6 +207,11 @@
 .paper-editor .hljs-variable,.paper-editor .hljs-template-variable{color:#9a4a14}
 .paper-editor .hljs-meta,.paper-editor .hljs-doctag{color:#616b86}
 .paper-editor .hljs-type,.paper-editor .hljs-attribute{color:#26748a}
+.paged-table.table-controls-visible .table-add-row,.paged-table.table-controls-visible .table-add-column{opacity:1;pointer-events:auto}
+.table-add-row:before{content:'';position:absolute;inset:-8px -8px 0}
+.table-add-column:before{content:'';position:absolute;inset:0 -8px}
+.table-axis-handle[hidden],.table-row-drop-line[hidden],.table-column-drop-line[hidden]{display:none!important}
+button.table-add-row:active:not(:disabled),button.table-add-column:active:not(:disabled){transform:none}
 .paper-editor .hljs-comment,.paper-editor .hljs-quote{color:#667c63}
 
 .paper-editor p.plain-line{white-space:pre-wrap;margin:0!important;min-height:1em;tab-size:4;overflow-wrap:anywhere;word-break:normal}

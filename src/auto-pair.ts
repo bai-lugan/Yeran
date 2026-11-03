@@ -47,7 +47,8 @@ export const AutoPair=Extension.create({
         const {from,$from}=view.state.selection;if($from.parent.type.spec.code||$from.marks().some(m=>m.type.name==='code'))return false;const before=$from.parent.textBetween(0,$from.parentOffset),after=$from.parent.textBetween($from.parentOffset,$from.parent.content.size)
         const fence=/^```([\w+-]*)$/.exec(before);if(event.key==='Enter'&&fence&&!after&&$from.parent.type.name==='paragraph'){event.preventDefault();const tr=view.state.tr.replaceWith($from.before(),$from.after(),view.state.schema.nodes.codeBlock!.create({language:fence[1]||null}));let caret=$from.start();const end=Math.min(tr.doc.content.size,$from.after()+tr.doc.content.size-view.state.doc.content.size);tr.doc.nodesBetween($from.before(),end,(node,pos)=>{if(node.type.name==='codeBlock'){caret=pos+1;return false}});tr.setSelection(TextSelection.create(tr.doc,caret));view.dispatch(tr);return true}
         if(event.key!=='Backspace')return false
-        if(before&&pairs[before.at(-1)!]===after[0]){event.preventDefault();view.dispatch(view.state.tr.delete(from-1,from+1));return true}return false
+        const closing=before?pairs[before.at(-1)!]:undefined
+        if(closing&&closing===after[0]){event.preventDefault();view.dispatch(view.state.tr.delete(from-1,from+1));return true}return false
       },
     }})]
   },

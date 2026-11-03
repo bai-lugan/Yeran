@@ -1,6 +1,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import './style.css'
+import './theme'
+import './theme.css'
 // Tiptap owns DOM and undo state outside Vue. Hot-remounting shared components
 // can destroy its editor while Vue retains a stale instance. Keep CSS HMR, but
 // flush recovery drafts and reload JavaScript updates in development.

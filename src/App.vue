@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { t, locale } from './i18n'
+import { themePreference } from './theme'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
 import { EditorContent, Editor } from '@tiptap/vue-3'
 import { TextSelection } from '@tiptap/pm/state'
@@ -866,6 +867,7 @@ onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('p
     <footer class="status-bar"><span class="status-save" role="status" :title="busy ? t(automaticSaving?'正在自动保存…':'正在处理文稿…') : toast || recoveryStatus"><Check v-if="!dirty || toast" :size="13" /><span class="status-dot" v-else></span>{{ t(busy ? (automaticSaving?'正在自动保存…':'正在处理文稿…') : toast || recoveryStatus || (dirty ? '尚未保存' : '就绪')) }}</span><div class="status-middle"><span>{{ viewMode === 'continuous' ? t('连续模式') : t(`第 ${currentPage} 页，共 ${pageCount} 页`) }}</span><i></i><span>{{ wordCount.toLocaleString() }}{{ t(' 字') }}</span></div><div class="zoom-controls"><button :aria-label="t('缩小')" @click="changeZoom(-10)"><Minus :size="13" /></button><button class="zoom-number" @click="fit = !fit" :title="t(fit ? '点击切换到 100%' : '点击适合窗口')">{{ t(fit ? '适合窗口' : `${zoom}%`) }}</button><button :aria-label="t('放大')" @click="changeZoom(10)"><Plus :size="13" /></button><button :aria-label="t('适合窗口')" :title="t('适合窗口')" @click="fit = true"><Maximize2 :size="13" /></button></div></footer>
     <Transition name="popover"><section v-if="settings" class="settings-panel" :aria-label="t('页面设置')">
       <header><div><strong>{{ t('页面设置') }}</strong><p>{{ t('调整后，分页会自动更新。') }}</p></div><button class="icon-btn" :aria-label="t('关闭页面设置')" @click="settings = false"><X :size="16" /></button></header>
+      <label>{{ t('外观主题') }}<select v-model="themePreference" :aria-label="t('外观主题')"><option value="system">{{ t('跟随系统（默认）') }}</option><option value="light">{{ t('浅色') }}</option><option value="dark">{{ t('深色') }}</option></select></label>
       <div class="paper-size-row"><FileText :size="24" /><div><strong>A4</strong><span>{{ t(layout.orientation === 'landscape' ? '297 × 210 mm · 横向' : '210 × 297 mm · 纵向') }}</span></div><Check :size="16" /></div>
       <label>{{ t('默认方向') }}<select :aria-label="t('纸张方向')" v-model="layout.orientation" @change="currentTab.baseOrientation = layout.orientation; dirty = true; scheduleDraft()"><option value="portrait">{{ t('纵向 · 210 × 297 mm') }}</option><option value="landscape">{{ t('横向 · 297 × 210 mm') }}</option></select></label>
       <div class="settings-columns"><label>{{ t('指定页面') }}<select :aria-label="t('指定页面')" v-model.number="settingPage"><option v-for="n in pageCount" :key="n" :value="n">{{ n }}</option></select></label><label>{{ t('本页方向') }}<select :aria-label="t('本页方向')" v-model="pageDirection"><option value="">{{ t('跟随默认') }}</option><option value="portrait">{{ t('纵向') }}</option><option value="landscape">{{ t('横向') }}</option></select></label></div>

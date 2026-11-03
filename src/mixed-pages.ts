@@ -72,6 +72,13 @@ export const MixedPagination = Extension.create<MixedOptions>({
           }
           root.classList.remove('continuous-doc')
           if (!wanted) {
+            // Continuous mode removes this class without activating mixed pages.
+            // Restore it on every return to uniform pages: it also supplies the
+            // table display:contents rules that allow rows to cross page floats.
+            if(!root.classList.contains('rm-with-pagination')){
+              root.classList.remove('mixed-page-doc');root.classList.add('rm-with-pagination')
+              root.style.width='var(--rm-page-width)';root.style.minHeight='var(--rm-page-height)'
+            }
             if (active) {
               active = false; root.classList.remove('mixed-page-doc'); root.classList.add('rm-with-pagination'); root.style.width = 'var(--rm-page-width)'; root.style.minHeight = 'var(--rm-page-height)'
               root.querySelectorAll<HTMLElement>('[data-mixed-sized]').forEach(el=>{el.style.removeProperty('width');el.style.removeProperty('margin-left');delete el.dataset.mixedSized})

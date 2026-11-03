@@ -7,6 +7,7 @@ try { stored = localStorage.getItem(KEY) } catch {}
 export const locale = ref<Locale>(stored === 'en' || stored === 'zh-TW' ? stored : 'zh-CN')
 watch(locale, value => { document.documentElement.lang = value; try { localStorage.setItem(KEY, value) } catch {} }, { immediate: true })
 const english: Record<string,string> = {
+ '外观主题':'Appearance','跟随系统（默认）':'System (default)','浅色':'Light','深色':'Dark',
  '重命名':'Rename','已重命名':'Renamed','新的文件名称':'New file name','Enter 重命名 · Esc 取消':'Enter to rename · Esc to cancel','新建未命名文件':'New untitled file','新建文件 · Ctrl+N':'New file · Ctrl+N','名称不能为空或以空格、点结尾。':'The name cannot be empty or end with a space or period.','更改文稿格式请使用另存为。':'Use Save As to change the document format.','磁盘重命名请使用桌面版。':'Use the desktop app to rename files on disk.','文件已在外部修改，请重新加载后再重命名。':'The file changed externally. Reload it before renaming.','正在处理文稿，请稍后重试。':'A document operation is in progress. Try again shortly.','文稿已关闭。':'The document has been closed.','目标文件已在其他标签页打开，请选择不同的名称。':'The target is open in another tab. Choose a different name.','不支持重命名符号链接。':'Renaming symbolic links is not supported.','请选择文稿文件。':'Select a document file.',
  '纯文本不生成标题大纲。':'Plain text has no heading outline.','新建纯文本':'New plain text','文稿与文本文件':'Documents and text files','文本文件':'Text files','文本文件（保留文件名）':'Text files (keep filename)','纯文本请保存为文本文件。':'Save plain text as a text file.','请选择文本类文件后缀。':'Choose a text file extension.','支持 20 MB 以内的文本文件。':'Text files up to 20 MB are supported.','文件不是支持的 UTF-8 / UTF-16 文本，未作为文本打开。':'The file is not supported UTF-8 / UTF-16 text and was not opened.','文件包含二进制数据，未作为文本打开。':'The file contains binary data and was not opened as text.','文本编码无效，原文件未覆盖。':'Invalid text encoding. The original file was not overwritten.',
 
@@ -187,6 +188,8 @@ export function t(value: unknown): string {
     [/^关闭 (.+)$/s,m=>`Close ${m[1]}`], [/^未命名 (\d+)\.(md|txt)$/,m=>`Untitled ${m[1]}.${m[2]}`], [/^已保存 (.+)$/s,m=>`Saved ${m[1]}`], [/^已打开 (.+)$/s,m=>`Opened ${m[1]}`], [/^历史 · (.+)$/s,m=>`History · ${m[1]}`], [/^保留稿 · (.+)$/s,m=>`Retained draft · ${m[1]}`],
   ]
   if (locale.value === 'zh-TW') {
+    const themeLabels:Record<string,string>={'外观主题':'外觀主題','跟随系统（默认）':'跟隨系統（預設）','浅色':'淺色','深色':'深色'}
+    if(themeLabels[raw])return prefix+themeLabels[raw]+suffix
     const fileMessage = /^(关闭 |已保存 |已打开 |历史 · |保留稿 · )(.+)$/s.exec(raw)
     return prefix + (fileMessage ? hant(fileMessage[1]!) + fileMessage[2] : hant(raw)) + suffix
   }

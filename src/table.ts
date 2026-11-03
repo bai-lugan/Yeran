@@ -1,6 +1,6 @@
 import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table'
 import { CellSelection, TableMap } from '@tiptap/pm/tables'
-import { Plugin, PluginKey, NodeSelection } from '@tiptap/pm/state'
+import { Plugin, PluginKey, NodeSelection, TextSelection } from '@tiptap/pm/state'
 import { closeHistory } from '@tiptap/pm/history'
 import { Fragment, Slice, DOMSerializer, type Schema, type Node as PMNode } from '@tiptap/pm/model'
 import type { Editor } from '@tiptap/core'
@@ -97,7 +97,14 @@ export function tableAction(editor:Editor,action:'appendRow'|'appendColumn'|'dup
     if(widths.length===map.width&&widths.every(n=>n>0))widths.splice(action==='appendColumn'?map.width:at+1,0,action==='appendColumn'?100/map.width:widths[at]!);else widths=[]
   }
   const replacement=table.type.create({...table.attrs,columnSize:widths.length===TableMap.get(table).width+(action.includes('Column')?1:0)?widths.join(','):table.attrs.columnSize},Fragment.fromArray(rows))
-  editor.view.dispatch(closeHistory(editor.state.tr).replaceWith(pos,pos+table.nodeSize,replacement));editor.view.focus();return true
+  // Replacing the whole table otherwise maps a caret inside it to the paragraph
+  // after it. Place the caret in the inserted cell before restoring focus.
+  const nextMap=TableMap.get(replacement)
+  const row=action==='appendRow'?nextMap.height-1:action==='duplicateRow'?at+1:Math.max(0,Math.min(index??(context?.row||1)-1,nextMap.height-1))
+  const column=action==='appendColumn'?nextMap.width-1:action==='duplicateColumn'?at+1:Math.min((context?.column||1)-1,nextMap.width-1)
+  const tr=closeHistory(editor.state.tr).replaceWith(pos,pos+table.nodeSize,replacement)
+  const cell=pos+1+nextMap.map[row*nextMap.width+column]!
+  editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(cell+1))).scrollIntoView());editor.view.focus();return true
 }
 export function headerColumnEnabled(table:PMNode){return !!table.attrs.headerColumn||table.childCount>1&&Array.from({length:table.childCount-1},(_,i)=>table.child(i+1).firstChild?.type.name==='tableHeader').every(Boolean)}
 export function toggleFirstHeaderColumn(editor:Editor){
@@ -213,6 +220,7 @@ class PagedTableView implements NodeView {
   private hoveredColumn = -1
   private merged = false
   private rowFrame = 0
+  private hideTimer?: ReturnType<typeof setTimeout>
   private observer: ResizeObserver
   private rowDrag?: { from: number; table: PMNode; insertAt: number; moved: boolean }
   private columnDrag?: { from: number; table: PMNode; insertAt: number; moved: boolean }
@@ -226,6 +234,7 @@ class PagedTableView implements NodeView {
   private dropLine = document.createElement('div')
   private columnDropLine = document.createElement('div')
   private unwatch: () => void
+  private scrolled=(event:Event)=>{if((event.target as HTMLElement)?.contains?.(this.dom))this.scheduleRows()}
   constructor(private node: PMNode, private editor: Editor, private getPos: () => number | undefined) {
     this.dom.className = 'paged-table'
     this.contentDOM.className = 'table-plus'
@@ -263,18 +272,25 @@ class PagedTableView implements NodeView {
       if (typeof pos === 'number' && index >= 0) moveTableColumn(this.editor, pos, index, index + (event.key === 'ArrowLeft' ? -1 : 2))
     })
     this.columnHandle = columnHandle
-    for(const [button,axis]of [[this.addRow,'Row'],[this.addColumn,'Column']] as const){button.type='button';button.className=axis==='Row'?'table-add-row':'table-add-column';button.textContent='+';button.setAttribute('aria-label',t(axis==='Row'?'在表格末尾添加行':'在表格末尾添加列'));button.title=t(axis==='Row'?'在表格末尾添加行':'在表格末尾添加列');button.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation()});button.addEventListener('click',()=>tableAction(editor,axis==='Row'?'appendRow':'appendColumn',this.getPos()))}
+    for(const [button,axis]of [[this.addRow,'Row'],[this.addColumn,'Column']] as const){button.type='button';button.className=axis==='Row'?'table-add-row':'table-add-column';button.textContent='+';button.setAttribute('aria-label',t(axis==='Row'?'在表格末尾添加行':'在表格末尾添加列'));button.title=t(axis==='Row'?'在表格末尾添加行':'在表格末尾添加列');button.addEventListener('pointerdown',event=>{event.preventDefault();event.stopPropagation();this.showControls()});button.addEventListener('click',()=>tableAction(editor,axis==='Row'?'appendRow':'appendColumn',this.getPos(),axis==='Column'?Math.max(0,this.hoveredRow):undefined))}
     rowHandle.addEventListener('mouseenter', () => this.previewAxis('row', this.hoveredRow))
     columnHandle.addEventListener('mouseenter', () => this.previewAxis('column', this.hoveredColumn))
     for (const handle of [rowHandle,columnHandle]) handle.addEventListener('mouseleave', () => { if (!this.rowDrag && !this.columnDrag) this.clearAxisPreview() })
     this.dom.addEventListener('mousemove', event => this.trackPointer(event))
     // Like Notion, the top border itself is draggable: grab it anywhere over a column.
     this.dom.addEventListener('pointerdown', event => this.grabTableBorder(event))
-    this.dom.addEventListener('mouseleave', () => { if (!this.columnDrag && !this.rowDrag) this.hideGrips() })
+    this.dom.addEventListener('mouseenter', () => this.showControls())
+    // Bridge the small gap between the table edge and its external controls.
+    // Leaving the table must not hide/move the button while approaching it.
+    this.dom.addEventListener('mouseleave', () => {
+      clearTimeout(this.hideTimer)
+      this.hideTimer=setTimeout(()=>{if(!this.columnDrag&&!this.rowDrag){this.dom.classList.remove('table-controls-visible');this.hideGrips()}},220)
+    })
     this.dropLine.className = 'table-row-drop-line'; this.dropLine.hidden = true
     this.columnDropLine.className = 'table-column-drop-line'; this.columnDropLine.hidden = true
     this.controls.append(tableHandle, rowHandle, columnHandle, this.addRow, this.addColumn, this.dropLine, this.columnDropLine)
     this.observer = new ResizeObserver(() => this.scheduleRows()); this.observer.observe(this.dom)
+    document.addEventListener('scroll',this.scrolled,true)
     this.update(node)
   }
   update(node: PMNode) {
@@ -311,7 +327,7 @@ class PagedTableView implements NodeView {
     this.rowFrame = requestAnimationFrame(() => {
       const rows = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr')]
       if (this.hoveredRow >= rows.length) this.hideRowHandle()
-      const rect = this.dom.getBoundingClientRect(), scale = rect.width / this.dom.offsetWidth || 1
+      const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
       const first = rows[0]?.getBoundingClientRect()
       if(first) {
         const tableHandle = this.controls.querySelector<HTMLElement>('.table-block-handle')!
@@ -319,7 +335,7 @@ class PagedTableView implements NodeView {
         let left = 0
         this.handles.forEach((handle,i)=>{ left += this.widths[i]!; handle.style.left = `${(first.left - rect.left + first.width * left / 100) / scale}px`; handle.style.top = `${(first.top - rect.top) / scale}px`; handle.style.height = `${first.height / scale}px` })
         // Single shared grips follow whichever row and column the pointer is over.
-        this.positionColumnHandle(rows[0] ? [...rows[0].querySelectorAll<HTMLElement>('th,td')] : [], rect, scale)
+        this.positionColumnHandle(this.cells_(rows[0]), rect, scale)
         this.positionRowHandle(rows, rect, scale)
         this.positionAddButtons(rows,rect,scale)
       }
@@ -343,7 +359,7 @@ class PagedTableView implements NodeView {
     this.dom.classList.add('dragging-table-row')
     const showDrop = (clientY: number) => {
       const current = this.rows_()
-      const rect = this.dom.getBoundingClientRect(), scale = rect.width / this.dom.offsetWidth || 1
+      const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
       let insertAt = this.rowAtY(current,clientY,true)
       insertAt = Math.max(1, Math.min(insertAt, current.length))
       this.rowDrag!.insertAt = insertAt
@@ -400,14 +416,14 @@ class PagedTableView implements NodeView {
   private clearAxisPreview() { this.contentDOM.querySelectorAll('.table-axis-preview').forEach(el=>el.classList.remove('table-axis-preview')) }
   private previewAxis(axis:'row'|'column',index:number) {
     this.clearAxisPreview()
-    const rows=this.rows_(); const cells=axis==='row'?[...rows[index]?.children||[]]:rows.map(row=>row.children[index]).filter(Boolean)
+    const rows=this.rows_(); const cells=axis==='row'?this.cells_(rows[index]):rows.map(row=>this.cells_(row)[index]).filter(Boolean)
     cells.forEach(cell=>cell.classList.add('table-axis-preview'))
   }
   // Clone the whole axis with real cell dimensions and content, rather than a label.
   private showGhost(axis:'row'|'column', index:number, event:PointerEvent) {
     if(this.ghost)return
     const rows=this.rows_(), source=axis==='row'?[rows[index]!]:rows
-    const first=(axis==='row'?rows[index]:rows[0]?.children[index]) as HTMLElement
+    const first=(axis==='row'?rows[index]:this.cells_(rows[0])[index]) as HTMLElement
     if(!first)return
     const box=first.getBoundingClientRect(), scale=this.dom.getBoundingClientRect().width/this.dom.offsetWidth||1
     this.ghostAxis=axis; this.ghostOffset=axis==='row'?event.clientY-box.top:event.clientX-box.left
@@ -418,14 +434,14 @@ class PagedTableView implements NodeView {
     table.className='table-drag-preview';table.append(body);ghost.append(table)
     const originals:HTMLElement[]=[]
     for(const row of source){
-      const line=document.createElement('tr'),cells=axis==='row'?[...row.children]:[row.children[index]!]
+      const line=document.createElement('tr'),cells=axis==='row'?this.cells_(row):[this.cells_(row)[index]!]
       for(const cell of cells){
         if(!(cell instanceof HTMLElement))continue
         const clone=cell.cloneNode(true) as HTMLElement, rect=cell.getBoundingClientRect(), css=getComputedStyle(cell)
         clone.className='';clone.removeAttribute('contenteditable');clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'))
         clone.querySelectorAll('button,input,textarea,.block-controls,.table-resizers').forEach(el=>el.remove())
         clone.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'))
-        clone.style.cssText=`box-sizing:border-box;position:relative;vertical-align:top;width:${rect.width}px;min-width:${rect.width}px;height:${rect.height}px;border:1px solid #c2cfe3;background:${cell.style.backgroundColor||(cell.tagName==='TH'?'#f4f6fa':'#fff')};font-family:${css.fontFamily};font-size:${parseFloat(css.fontSize)*scale}px;line-height:${css.lineHeight==='normal'?'normal':parseFloat(css.lineHeight)*scale+'px'};color:${css.color};text-align:${css.textAlign};white-space:normal;overflow-wrap:anywhere;padding:${['Top','Right','Bottom','Left'].map(side=>parseFloat(css.getPropertyValue('padding-'+side.toLowerCase()))*scale+'px').join(' ')}`
+        clone.style.cssText=`box-sizing:border-box;position:relative;vertical-align:top;width:${rect.width}px;min-width:${rect.width}px;height:${rect.height}px;border:1px solid ${css.borderTopColor};background:${css.backgroundColor==='rgba(0, 0, 0, 0)'?getComputedStyle(this.dom.closest('.paper-editor')!).backgroundColor:css.backgroundColor};font-family:${css.fontFamily};font-size:${parseFloat(css.fontSize)*scale}px;line-height:${css.lineHeight==='normal'?'normal':parseFloat(css.lineHeight)*scale+'px'};color:${css.color};text-align:${css.textAlign};white-space:normal;overflow-wrap:anywhere;padding:${['Top','Right','Bottom','Left'].map(side=>parseFloat(css.getPropertyValue('padding-'+side.toLowerCase()))*scale+'px').join(' ')}`
         originals.push(cell);line.append(clone)
       }
       body.append(line)
@@ -452,7 +468,10 @@ class PagedTableView implements NodeView {
     if (this.rowHandle) this.rowHandle.hidden = true
   }
   private hideGrips() { this.hideRowHandle(); this.hideColumnHandle(); this.hoveredCell?.classList.remove('table-cell-hovered'); this.hoveredCell=undefined;this.clearAxisPreview() }
+  private showControls(){clearTimeout(this.hideTimer);this.dom.classList.add('table-controls-visible')}
   private rows_() { return [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr')] }
+  // Repeated print headers are decoration widgets, never document cells.
+  private cells_(row?:HTMLElement){return row?[...row.querySelectorAll<HTMLElement>(':scope > :is(th,td):not(.repeat-header-widget)')]:[]}
   private positionAddButtons(rows:HTMLElement[],rect:DOMRect,scale:number){const last=rows.at(-1)?.getBoundingClientRect(),side=rows[Math.max(0,this.hoveredRow)]?.getBoundingClientRect();if(last){this.addRow.style.left=`${(last.left+last.width/2-rect.left)/scale-12}px`;this.addRow.style.top=`${(last.bottom-rect.top)/scale+2}px`}if(side){this.addColumn.style.left=`${(side.right-rect.left)/scale+3}px`;this.addColumn.style.top=`${(side.top+side.height/2-rect.top)/scale-12}px`}}
   // The row grip straddles the table's left border, centred on the hovered row.
   private positionRowHandle(rows: HTMLElement[], rect: DOMRect, scale: number) {
@@ -467,13 +486,14 @@ class PagedTableView implements NodeView {
     if (this.columnDrag || this.rowDrag) return
     const target=event.target as HTMLElement, cell=target.closest<HTMLElement>('td,th')
     if(cell&&this.contentDOM.contains(cell)){
-      if(cell===this.hoveredCell)return
+      if(cell===this.hoveredCell&&!this.rowHandle?.hidden&&!this.columnHandle?.hidden){this.scheduleRows();return}
       const rows=this.rows_(), row=cell.closest('tr')!, index=rows.indexOf(row)
       if(index<0)return
-      const column=[...row.children].slice(0,[...row.children].indexOf(cell)).reduce((n,el)=>n+((el as HTMLTableCellElement).colSpan||1),0)
+      if(cell.classList.contains('repeat-header-widget'))return
+      const cells=this.cells_(row),column=cells.slice(0,cells.indexOf(cell)).reduce((n,el)=>n+((el as HTMLTableCellElement).colSpan||1),0)
       this.hoveredRow=index;this.hoveredColumn=column;this.rowHandle!.hidden=false;this.columnHandle!.hidden=false;this.labelRow();this.labelColumn()
-      const rect=this.dom.getBoundingClientRect(),scale=rect.width/this.dom.offsetWidth||1
-      this.positionRowHandle(rows,rect,scale);this.positionColumnHandle([...rows[0]!.children] as HTMLElement[],rect,scale)
+      const rect=this.controls.getBoundingClientRect(),scale=rect.width/this.controls.offsetWidth||1
+      this.positionRowHandle(rows,rect,scale);this.positionColumnHandle(this.cells_(rows[0]),rect,scale)
       this.positionAddButtons(rows,rect,scale)
       if(this.hoveredCell!==cell){this.hoveredCell?.classList.remove('table-cell-hovered');this.hoveredCell=cell;cell.classList.add('table-cell-hovered')}
       return
@@ -501,7 +521,7 @@ class PagedTableView implements NodeView {
     const handle = this.rowHandle; if (!handle) return
     handle.hidden = false
     if (changed) this.labelRow()
-    const rect = this.dom.getBoundingClientRect(), scale = rect.width / this.dom.offsetWidth || 1
+    const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
     this.positionRowHandle(rows, rect, scale)
   }
   private labelColumn() {
@@ -518,17 +538,21 @@ class PagedTableView implements NodeView {
     const handle = this.columnHandle; if (!handle) return
     const index = this.hoveredColumn
     if (handle.hidden || index < 0) return
-    const cell = header[index]?.getBoundingClientRect()
+    const cell = (this.cells_(this.rows_()[this.hoveredRow])[index]||header[index])?.getBoundingClientRect()
     if (!cell) { handle.hidden = true; return }
     // Centre the grip on the border with plain geometry: a CSS translate would jump
     // back to zero on :active while the pointer is already holding it.
     const width = handle.offsetWidth || 30, height = handle.offsetHeight || 30
     handle.style.left = `${(cell.left + cell.width / 2 - rect.left) / scale - width / 2}px`
-    handle.style.top = `${(cell.top - rect.top) / scale - height / 2}px`
+    const canvas=this.dom.closest<HTMLElement>('.canvas'),top=header[index]?.getBoundingClientRect().top??cell.top
+    // A long table's first row can be several pages above the viewport. Keep
+    // column controls reachable without scrolling back to its first page.
+    const visibleTop=canvas?canvas.getBoundingClientRect().top+(canvas.querySelector('.canvas-meta')?.getBoundingClientRect().height||0)+height*scale/2:top
+    handle.style.top = `${(Math.max(top,visibleTop,top<visibleTop?cell.top:top) - rect.top) / scale - height / 2}px`
   }
   private trackColumn(event: MouseEvent) {
     if (this.columnDrag) return
-    const header = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr:first-child > :is(th,td)')]
+    const header = this.cells_(this.rows_()[0])
     if (!header.length) return this.hideColumnHandle()
     const first = header[0]!.getBoundingClientRect(), last = header[header.length - 1]!.getBoundingClientRect()
     // Like Notion: the grip only appears when the pointer touches the top border band.
@@ -541,7 +565,7 @@ class PagedTableView implements NodeView {
     if (!this.columnHandle) return
     this.columnHandle.hidden = false
     if (changed) this.labelColumn()
-    const rect = this.dom.getBoundingClientRect(), scale = rect.width / this.dom.offsetWidth || 1
+    const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
     this.positionColumnHandle(header, rect, scale)
   }
   // Pressing anywhere on the table's border grabs what is under the pointer, the same
@@ -551,7 +575,7 @@ class PagedTableView implements NodeView {
     const target = event.target as HTMLElement
     if (this.controls.contains(target)) return
     if (!this.contentDOM.contains(target)) return
-    const header = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr:first-child > :is(th,td)')]
+    const header = this.cells_(this.rows_()[0])
     if (!header.length) return
     const first = header[0]!.getBoundingClientRect(), last = header[header.length - 1]!.getBoundingClientRect()
     // Top edge: grab the column under the pointer.
@@ -583,7 +607,7 @@ class PagedTableView implements NodeView {
     if (this.merged) { event.preventDefault(); selectTableColumn(this.editor,pos,from); return }
     event.preventDefault(); event.stopPropagation()
     const handle = this.columnHandle!, table = this.node
-    const header = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr:first-child > :is(th,td)')]
+    const header = this.cells_(this.rows_()[0])
     if (!header.length) return
     const startX = event.clientX
     this.columnDrag = { from, table, insertAt: from, moved: false }
@@ -596,7 +620,7 @@ class PagedTableView implements NodeView {
       const rows=dragRows,under=document.elementFromPoint(clientX,clientY)?.closest<HTMLElement>('tr')
       const candidate=under&&this.contentDOM.contains(under)?under:rows[this.rowAtY(rows,clientY)]
       const box=candidate?.getBoundingClientRect(),hit=box&&clientY>=box.top?candidate:undefined
-      const cells=hit?[...hit.children] as HTMLElement[]:header
+      const cells=hit?this.cells_(hit):header
       let insertAt = cells.findIndex(cell => { const box = cell.getBoundingClientRect(); return clientX < box.left + box.width / 2 })
       if (insertAt < 0) insertAt = header.length
       insertAt = Math.max(0, Math.min(insertAt, header.length))
@@ -604,8 +628,8 @@ class PagedTableView implements NodeView {
       const signature=`${insertAt}/${this.dom.offsetWidth}/${this.dom.offsetHeight}`
       if(signature===dropSignature)return
       dropSignature=signature
-      const rect=this.dom.getBoundingClientRect(),scale=rect.width/this.dom.offsetWidth||1
-      const segments=rows.map(row=>{const box=(row.children[Math.min(insertAt,row.children.length-1)] as HTMLElement).getBoundingClientRect(),line=document.createElement('i');line.style.cssText=`left:${((insertAt<row.children.length?box.left:box.right)-rect.left)/scale}px;top:${(box.top-rect.top)/scale}px;height:${box.height/scale}px`;return line})
+      const rect=this.controls.getBoundingClientRect(),scale=rect.width/this.controls.offsetWidth||1
+      const segments=rows.map(row=>{const cells=this.cells_(row),box=cells[Math.min(insertAt,cells.length-1)]!.getBoundingClientRect(),line=document.createElement('i');line.style.cssText=`left:${((insertAt<cells.length?box.left:box.right)-rect.left)/scale}px;top:${(box.top-rect.top)/scale}px;height:${box.height/scale}px`;return line})
       this.columnDropLine.replaceChildren(...segments)
       this.columnDropLine.hidden = false
     }
@@ -686,7 +710,7 @@ class PagedTableView implements NodeView {
     if (mutation.type === 'selection') return false
     return !this.contentDOM.contains(mutation.target)
   }
-  destroy() { this.cancelDrag?.(); this.clearGhost(); this.observer.disconnect(); this.unwatch(); cancelAnimationFrame(this.rowFrame) }
+  destroy() { document.removeEventListener('scroll',this.scrolled,true);clearTimeout(this.hideTimer);this.cancelDrag?.(); this.clearGhost(); this.observer.disconnect(); this.unwatch(); cancelAnimationFrame(this.rowFrame) }
 }
 
 function cellView(tag: 'td' | 'th', node: PMNode): NodeView {
