@@ -30,6 +30,7 @@ async function reset(markdown = sample) {
   await page.locator('.paper-editor table').waitFor()
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
   await page.mouse.move(20,120)
+  await page.waitForFunction(() => [...document.querySelectorAll('.table-axis-handle')].every(handle=>handle.hidden))
 }
 async function markdown() { return page.evaluate(() => window.__yeran.getMarkdown()) }
 async function headers() { return page.locator('.paper-editor tr').first().locator('th').allInnerTexts() }
@@ -74,7 +75,7 @@ try {
     }
     // Leaving the table hides it again.
     await page.mouse.move(20, 900)
-    await frames()
+    await page.waitForFunction(() => document.querySelector('.table-column-handle')?.hidden)
     assert.equal(await grip(), null, 'grip should hide when the pointer leaves the table')
   })
 
@@ -297,7 +298,7 @@ try {
     await page.waitForFunction(() => [...document.querySelectorAll('.paper-editor tr')].at(-1).children[0].innerText.trim() === '梨')
     // Leaving the table hides it again.
     await page.mouse.move(20, 900)
-    await frames()
+    await page.waitForFunction(() => document.querySelector('.table-row-handle')?.hidden)
     assert.equal(await rowGrip(), null, 'row grip should hide when the pointer leaves the table')
   })
 
