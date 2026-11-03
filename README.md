@@ -8,20 +8,20 @@
 
 在渲染后的文字中直接编辑，随时切换连续写作与 A4 分页。像 Word 一样排版，像 Typora 一样写作。
 
-## 下载 1.0
+## 下载 1.0.1
 
-Windows x64 · v1.0.0
+Windows x64 · v1.0.1
 
 | 版本 | 下载 | 使用方式 |
 | --- | --- | --- |
-| 安装版（推荐） | [下载 Windows 安装包](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/Yeran_1.0.0_x64-setup.exe) | 安装后使用，提供快捷方式与文件打开方式 |
-| 便携版 | [下载便携 ZIP](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/Yeran-1.0-portable.zip) | 解压后运行 `Yeran-1.0.exe` |
+| 安装版（推荐） | [下载 Windows 安装包](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/Yeran_1.0.1_x64-setup.exe) | 安装后使用，提供快捷方式与文件打开方式 |
+| 便携版 | [下载便携 ZIP](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/Yeran-1.0.1-portable.zip) | 解压后运行 `Yeran-1.0.1.exe` |
 
-[全部附件与源码](https://github.com/bai-lugan/Yeran/releases/tag/v1.0.0) · [SHA-256 校验值](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/SHA256SUMS-v1.0.0.txt)
+[全部附件与源码](https://github.com/bai-lugan/Yeran/releases/tag/v1.0.1) · [SHA-256 校验值](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/SHA256SUMS-v1.0.1.txt)
 
 运行需要 WebView2 Runtime；PDF 导出使用本机 Edge 或 Chrome。便携版请保留随包的许可文件。
 
-## 1.0 能做什么
+## 1.0.1 能做什么
 
 - **管理文件**：目录树、已打开文件、多标签、跨文件搜索；右键新建文件/文件夹，F2 重命名文件。
 - **直接写作**：所见即所得、`/` 插入菜单、块拖动、折叠块、待办、文字颜色与高亮。
@@ -30,7 +30,9 @@ Windows x64 · v1.0.0
 - **操作表格**：单元格编辑与 Excel 粘贴，整行/整列拖动、增删、列宽和底色设置。
 - **保护文稿**：查找替换、可选自动保存、恢复草稿、文件历史与外部修改检测。
 
-支持简体中文、繁體中文和 English 界面。
+支持简体中文、繁體中文和 English 界面；外观可选浅色、深色或跟随系统（默认）。
+
+1.0.1 修复删字跳行、表格加号难以点击及连续模式返回 A4 的长表格分页问题。详见[更新说明](PATCH_NOTES_1.0.1.md)。
 
 ## 文件格式
 

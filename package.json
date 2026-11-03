@@ -1,6 +1,6 @@
 {
   "name": "yeran",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -24,7 +24,8 @@
     "test:07-files": "node scripts/verify-07-files.mjs",
     "test:08": "node scripts/verify-08.mjs",
     "test:09": "node scripts/verify-09.mjs",
-    "test:10": "node scripts/verify-10.mjs"
+    "test:10": "node scripts/verify-10.mjs",
+    "test:11": "node scripts/verify-11.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

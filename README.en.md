@@ -8,20 +8,20 @@
 
 Edit rendered text directly and switch between continuous writing and A4 pages. Lay out like Word. Write like Typora.
 
-## Download 1.0
+## Download 1.0.1
 
-Windows x64 · v1.0.0
+Windows x64 · v1.0.1
 
 | Edition | Download | Getting started |
 | --- | --- | --- |
-| Installer (recommended) | [Download Windows installer](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/Yeran_1.0.0_x64-setup.exe) | Install with shortcuts and file open-with registration |
-| Portable | [Download portable ZIP](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/Yeran-1.0-portable.zip) | Extract and run `Yeran-1.0.exe` |
+| Installer (recommended) | [Download Windows installer](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/Yeran_1.0.1_x64-setup.exe) | Install with shortcuts and file open-with registration |
+| Portable | [Download portable ZIP](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/Yeran-1.0.1-portable.zip) | Extract and run `Yeran-1.0.1.exe` |
 
-[All assets and source](https://github.com/bai-lugan/Yeran/releases/tag/v1.0.0) · [SHA-256 checksums](https://github.com/bai-lugan/Yeran/releases/download/v1.0.0/SHA256SUMS-v1.0.0.txt)
+[All assets and source](https://github.com/bai-lugan/Yeran/releases/tag/v1.0.1) · [SHA-256 checksums](https://github.com/bai-lugan/Yeran/releases/download/v1.0.1/SHA256SUMS-v1.0.1.txt)
 
 WebView2 Runtime is required; PDF export uses a locally installed Edge or Chrome. Keep the license files included in the portable package.
 
-## What's in 1.0
+## What's in 1.0.1
 
 - **File management:** folder tree, open editors, tabs and cross-file search; create files/folders from context menus and rename files with F2.
 - **Direct writing:** WYSIWYG editing, slash commands, draggable blocks, toggles, tasks, text colors and highlights.
@@ -30,7 +30,9 @@ WebView2 Runtime is required; PDF export uses a locally installed Edge or Chrome
 - **Tables:** cell editing, Excel paste, whole-row/column dragging, insertion/deletion, widths and backgrounds.
 - **Document protection:** find/replace, optional auto-save, recovery drafts, file history and external-change detection.
 
-Simplified Chinese, Traditional Chinese and English interfaces are available.
+Simplified Chinese, Traditional Chinese and English interfaces are available. Choose Light, Dark or System (default) appearance.
+
+1.0.1 fixes Backspace caret jumps, disappearing table add controls and long-table pagination when returning from continuous mode.
 
 ## File formats
 
