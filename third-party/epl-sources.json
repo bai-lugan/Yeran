@@ -1,0 +1,11 @@
+{
+  "package": "elkjs",
+  "version": "0.9.3",
+  "license": "EPL-2.0",
+  "source": "https://github.com/kieler/elkjs/tree/0.9.3",
+  "sourceCommit": "a8304cf79fde75bc2ab1a89d28320f53f8637436",
+  "algorithmSource": "https://github.com/eclipse-elk/elk",
+  "includedAlgorithmSnapshot": "9bc93474e1dc649450e8c97abb45d16b7c88e35b",
+  "algorithmSnapshotNote": "A source snapshot preceding the elkjs 0.9.3 release, with the core and algorithm modules named by its Gradle build. The upstream release does not record the precise ELK build commit; this is not asserted to be that exact build commit.",
+  "modified": false
+}
