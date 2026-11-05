@@ -1,18 +1,18 @@
 <script setup lang="ts">
 import { computed,nextTick, onMounted, onBeforeUnmount, ref } from 'vue'
-import { ChevronRight, FileArchive, FilePlus2, FileText, FolderOpen, FolderPlus, History, ListTree, RotateCw, SaveAll, Search, X, Pencil } from 'lucide-vue-next'
+import { ChevronRight, FileArchive, FilePlus2, FileText, FolderOpen, FolderPlus, History, ListTree, RotateCw, SaveAll, Save, Search, X, Pencil } from 'lucide-vue-next'
 import { libraryRoot, recentFiles, chooseLibrary, folderChildren, refreshLibrary, searchLibrary, forgetRecent, samePath, createLibraryEntry, openLibraryFolder, canOpenSystemFolder,parentPath,withinFolder, type LibraryEntry, type SearchHit,type RenameTarget } from '../library'
 import FileTree from './FileTree.vue'
 import FileEntryInput from './FileEntryInput.vue'
 import { t } from '../i18n'
 const props = defineProps<{ tabs: { id: string; label: string; path: string | null; dirty: boolean }[]; activeId: string; activePath: string | null;renameFile:(target:RenameTarget,name:string)=>Promise<string|null>;busy?:boolean }>()
-const emit = defineEmits<{ open: [{ path?: string; handleKey?: string; tabId?: string }]; hit: [SearchHit]; error: [unknown]; close: [string]; saveAll: [];newDocument:[] }>()
+const emit = defineEmits<{ open: [{ path?: string; handleKey?: string; tabId?: string }]; saveAs:[{path?:string;handleKey?:string;tabId?:string}];hit: [SearchHit]; error: [unknown]; close: [string]; saveAll: [];newDocument:[] }>()
 const tab = ref('tree'), entries = ref<LibraryEntry[]>([]), query = ref(''), hits = ref<SearchHit[]>([]), loading = ref(false), limited = ref(false), searched = ref(false)
 const editorsOpen = ref(true), rootOpen = ref(true), revision = ref(0), tree = ref<InstanceType<typeof FileTree>>()
 const creating=ref<{parent:string;directory:boolean;editorId?:string;root?:string}|null>(null),creationPending=ref(false),creationError=ref('')
 const renaming=ref<{target:RenameTarget;name:string;place:'editor'|'tree'}|null>(null),renamePending=ref(false),renameError=ref('')
 const treeRenaming=computed(()=>renaming.value?.place==='tree'&&renaming.value.target.path?{path:renaming.value.target.path,name:renaming.value.name}:null)
-const context=ref<{left:number;top:number;parent:string;entry?:LibraryEntry;editorId?:string}|null>(null),contextMenu=ref<HTMLElement>()
+const context=ref<{left:number;top:number;parent:string;entry?:LibraryEntry;editorId?:string;recent?:boolean}|null>(null),contextMenu=ref<HTMLElement>()
 const panel=ref<HTMLElement>()
 let contextTrigger:HTMLElement|null=null
 let generation = 0
@@ -74,11 +74,14 @@ async function create(name:string){
   finally{creationPending.value=false}
 }
 async function openSystemFolder(parent=libraryRoot.value){context.value=null;try{await openLibraryFolder(parent)}catch(error){emit('error',error)}}
-async function showContext(event:MouseEvent|KeyboardEvent,parent=libraryRoot.value,entry?:LibraryEntry,editorId?:string){
-  if((!parent&&!editorId)||creationPending.value||renamePending.value||props.busy)return
+function saveAs(){const selected=context.value;if(!selected)return;context.value=null;emit('saveAs',selected.editorId?{tabId:selected.editorId}:{path:selected.entry?.path,handleKey:selected.entry?.handleKey})}
+function recentContext(event:MouseEvent|KeyboardEvent,file:{path:string;handleKey?:string}){return showContext(event,parentPath(file.path),{...file,name:file.path.split(/[\\/]/).pop()!,relative:file.path,directory:false},undefined,true)}
+function createFromContext(){const selected=context.value;if(!selected)return;if(selected.editorId)void beginCreateForDocument(selected.editorId);else if(selected.parent)void beginCreate(false,selected.parent);else{context.value=null;emit('newDocument')}}
+async function showContext(event:MouseEvent|KeyboardEvent,parent=libraryRoot.value,entry?:LibraryEntry,editorId?:string,recent=false){
+  if((!parent&&!editorId&&!entry)||creationPending.value||renamePending.value||props.busy)return
   const bounds=(event.currentTarget as HTMLElement)?.getBoundingClientRect()
   contextTrigger=(event.target as HTMLElement)?.closest('button')||null
-  context.value={parent,entry,editorId,left:Math.max(8,Math.min(window.innerWidth-224,event instanceof MouseEvent?event.clientX:(bounds?.left||0)+20)),top:Math.max(8,Math.min(window.innerHeight-286,event instanceof MouseEvent?event.clientY:bounds?.bottom||0))}
+  context.value={parent,entry,editorId,recent,left:Math.max(8,Math.min(window.innerWidth-224,event instanceof MouseEvent?event.clientX:(bounds?.left||0)+20)),top:Math.max(8,Math.min(window.innerHeight-286,event instanceof MouseEvent?event.clientY:bounds?.bottom||0))}
   await nextTick();contextMenu.value?.querySelector<HTMLButtonElement>('button')?.focus()
 }
 function contextKey(event:KeyboardEvent){
@@ -107,9 +110,15 @@ defineExpose({ choose, load,beginRenameDocument,beginCreateForDocument })
       <div v-show="rootOpen" class="file-panel-list" @contextmenu.prevent="showContext($event)"><FileTree ref="tree" :entries="entries" :active-path="activePath" :root="libraryRoot" :revision="revision" :creating="creating?.editorId?null:creating" :renaming="treeRenaming" :rename-pending="renamePending" :rename-error="renameError" :pending="creationPending" :creation-error="creationError" @create="create" @cancel="creating=null" @context="showContext($event.event,$event.parent,$event.entry)" @rename="beginRename({path:$event.path},$event.name,'tree')" @rename-submit="rename" @rename-cancel="cancelRename" @open="emit('open', $event)" @error="emit('error', $event)" /><div v-if="!libraryRoot" class="explorer-empty"><p>{{ t('选择写作文件夹，浏览文稿与子目录。') }}</p><button class="primary-btn" @click="choose"><FolderOpen :size="14" />{{ t('打开文件夹') }}</button></div><p v-else-if="!entries.length && !loading" class="file-panel-note">{{ t('文件夹中没有支持的文稿') }}</p><p v-if="loading" class="file-panel-note" role="status">{{ t('正在读取文件…') }}</p></div>
     </div>
     <template v-if="tab === 'search'"><div class="library-search"><form @submit.prevent="search"><input v-model="query" :aria-label="t('跨文件搜索内容')" :placeholder="t('输入文字，Enter 搜索')" :disabled="!libraryRoot"><button class="icon-btn" :aria-label="t('搜索')" :disabled="!libraryRoot || loading"><Search :size="15" /></button></form><p v-if="!libraryRoot" class="file-panel-note">{{ t('先打开文件夹以搜索文稿') }}</p><p v-if="searched && !hits.length">{{ t('无匹配') }}</p><p v-if="limited">{{ t('结果已截断，请缩小搜索范围') }}</p><p v-if="loading" role="status">{{ t('正在读取文件…') }}</p></div><div class="file-panel-list"><button v-for="hit in hits" :key="hit.path + ':' + hit.line + ':' + hit.occurrence" class="library-hit" @click="emit('hit', { ...hit, query })"><strong>{{ hit.name }}<small>{{ hit.line }}</small></strong><span>{{ hit.excerpt }}</span></button></div></template>
-    <div v-else-if="tab==='recent'" class="file-panel-list recent-files"><div v-for="file in recentFiles" :key="file.path" class="recent-file" :class="{ active: samePath(activePath, file.path) }"><button :title="file.path" @click="emit('open', file)"><component :is="/\.(textpack|tetpack|textbundle)$/i.test(file.path) ? FileArchive : FileText" :size="14" /><span>{{ file.path.split(/[\\/]/).pop() }}<small>{{ file.path.replace(/[\\/][^\\/]+$/, '') }}</small></span></button><button class="icon-btn" :aria-label="t('从最近列表移除')" @click="forgetRecent(file.path)"><X :size="12" /></button></div><p v-if="!recentFiles.length" class="file-panel-note">{{ t('尚无最近文件') }}</p></div>
+    <div v-else-if="tab==='recent'" class="file-panel-list recent-files"><div v-for="file in recentFiles" :key="file.path" class="recent-file" :class="{ active: samePath(activePath, file.path) }"><button :title="file.path" @contextmenu.prevent.stop="recentContext($event,file)" @keydown.shift.f10.prevent.stop="recentContext($event,file)" @keydown.contextmenu.prevent.stop="recentContext($event,file)" @click="emit('open', file)"><component :is="/\.(textpack|tetpack|textbundle)$/i.test(file.path) ? FileArchive : FileText" :size="14" /><span>{{ file.path.split(/[\\/]/).pop() }}<small>{{ file.path.replace(/[\\/][^\\/]+$/, '') }}</small></span></button><button class="icon-btn" :aria-label="t('从最近列表移除')" @click="forgetRecent(file.path)"><X :size="12" /></button></div><p v-if="!recentFiles.length" class="file-panel-note">{{ t('尚无最近文件') }}</p></div>
     <Teleport to="body"><section v-if="context" ref="contextMenu" class="library-context-menu" role="menu" :aria-label="t('文件夹操作')" :style="{left:context.left+'px',top:context.top+'px'}" @keydown="contextKey">
-      <button role="menuitem" @click="context.editorId?beginCreateForDocument(context.editorId):beginCreate(false,context.parent)"><FilePlus2 :size="15"/>{{t('新建文件')}}</button><button v-if="context.parent" role="menuitem" @click="context.editorId?beginCreateForDocument(context.editorId,true):beginCreate(true,context.parent)"><FolderPlus :size="15"/>{{t('新建文件夹')}}</button><button v-if="context.editorId||context.entry&&!context.entry.directory" role="menuitem" @click="context.editorId?beginRenameDocument(context.editorId):beginRename({path:context.entry!.path},context.entry!.name,'tree')"><Pencil :size="15"/>{{t('重命名')}}<kbd>F2</kbd></button><hr><button v-if="context.parent" role="menuitem" @click="context=null;load()"><RotateCw :size="15"/>{{t('刷新文件列表')}}</button><button v-if="context.parent" role="menuitem" :disabled="!canOpenSystemFolder" @click="openSystemFolder(context.parent)"><FolderOpen :size="15"/>{{t('在 Windows 资源管理器中打开')}}</button><hr><button role="menuitem" @click="choose"><FolderOpen :size="15"/>{{t('打开其他文件夹…')}}</button>
+      <button v-if="!context.recent" role="menuitem" @click="createFromContext"><FilePlus2 :size="15"/>{{t('新建文件')}}</button>
+      <button v-if="context.parent&&!context.recent" role="menuitem" @click="context.editorId?beginCreateForDocument(context.editorId,true):beginCreate(true,context.parent)"><FolderPlus :size="15"/>{{t('新建文件夹')}}</button>
+      <button v-if="!context.recent&&(context.editorId||context.entry&&!context.entry.directory)" role="menuitem" @click="context.editorId?beginRenameDocument(context.editorId):beginRename({path:context.entry!.path},context.entry!.name,'tree')"><Pencil :size="15"/>{{t('重命名')}}<kbd>F2</kbd></button>
+      <button v-if="context.editorId||context.entry&&!context.entry.directory" role="menuitem" @click="saveAs"><Save :size="15"/>{{t('另存为…')}}</button>
+      <hr><button v-if="context.parent&&!context.recent" role="menuitem" @click="context=null;load()"><RotateCw :size="15"/>{{t('刷新文件列表')}}</button>
+      <button v-if="context.parent" role="menuitem" :disabled="!canOpenSystemFolder" @click="openSystemFolder(context.parent)"><FolderOpen :size="15"/>{{t('在 Windows 资源管理器中打开')}}</button>
+      <hr><button role="menuitem" @click="choose"><FolderOpen :size="15"/>{{t('打开其他文件夹…')}}</button>
     </section></Teleport>
   </section>
 </template>

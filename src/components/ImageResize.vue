@@ -38,7 +38,7 @@ function start(event:PointerEvent,corner:string){
  const move=(e:PointerEvent)=>{last=e;if(Math.hypot(e.clientX-startX,e.clientY-startY)>3)moved=true;if(moved&&!paintFrame)paintFrame=requestAnimationFrame(paint)}
  const clean=()=>{cancelAnimationFrame(paintFrame);preview.remove();dragging.value=false;document.removeEventListener('pointermove',move);document.removeEventListener('pointerup',up);document.removeEventListener('pointercancel',cancel);document.removeEventListener('keydown',key,true);window.removeEventListener('blur',cancel);cleanup=undefined;schedule()}
  const cancel=()=>clean(),key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancel()}}
- const up=()=>{if(moved)paint();const valid=editor.state.doc.eq(doc);clean();if(moved&&valid)editor.view.dispatch(closeHistory(editor.state.tr).setNodeMarkup(pos,undefined,{...selection.node.attrs,width:String(Math.round(width)),height:String(Math.round(height))}));editor.view.focus()}
+ const up=()=>{if(moved)paint();const valid=editor.state.doc.eq(doc);clean();if(moved&&valid){const tr=closeHistory(editor.state.tr).setNodeMarkup(pos,undefined,{...selection.node.attrs,width:String(Math.round(width)),height:String(Math.round(height))});tr.setSelection(NodeSelection.create(tr.doc,pos));editor.view.dispatch(tr)}editor.view.focus()}
  cleanup=cancel;document.addEventListener('pointermove',move);document.addEventListener('pointerup',up);document.addEventListener('pointercancel',cancel);document.addEventListener('keydown',key,true);window.addEventListener('blur',cancel)
 }
 onMounted(()=>{props.editor.on('transaction',schedule);window.addEventListener('scroll',schedule,true);window.addEventListener('resize',schedule);schedule()})
