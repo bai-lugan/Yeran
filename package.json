@@ -1,6 +1,6 @@
 {
   "name": "yeran",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -25,7 +25,16 @@
     "test:08": "node scripts/verify-08.mjs",
     "test:09": "node scripts/verify-09.mjs",
     "test:10": "node scripts/verify-10.mjs",
-    "test:11": "node scripts/verify-11.mjs"
+    "test:11": "node scripts/verify-11.mjs",
+    "test:12": "node scripts/verify-12.mjs",
+    "test:13": "node scripts/verify-13.mjs",
+    "test:14": "node scripts/verify-14.mjs",
+    "test:15": "node scripts/verify-15.mjs",
+    "test:16": "node scripts/verify-16.mjs",
+    "test:17": "node scripts/verify-17.mjs",
+    "test:18": "node scripts/verify-18.mjs",
+    "test:19": "node scripts/verify-19.mjs",
+    "test:20": "node scripts/verify-20.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
@@ -37,6 +46,7 @@
     "@tiptap/extension-heading": "3.32.1",
     "@tiptap/extension-highlight": "3.32.1",
     "@tiptap/extension-image": "3.32.1",
+    "@tiptap/extension-link": "3.32.1",
     "@tiptap/extension-list": "3.32.1",
     "@tiptap/extension-paragraph": "3.32.1",
     "@tiptap/extension-placeholder": "3.32.1",
@@ -53,9 +63,9 @@
     "highlight.js": "^11.12.0",
     "katex": "0.19.1",
     "lucide-vue-next": "^0.468.0",
+    "mermaid": "12.2.0",
     "tiptap-pagination-plus": "3.1.0",
-    "vue": "^3.5.0",
-    "@tiptap/extension-link": "3.32.1"
+    "vue": "^3.5.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

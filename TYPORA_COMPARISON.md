@@ -6,6 +6,10 @@
 
 ## 编辑与 Markdown
 
+本地 1.0.7 另增加图片、Mermaid、代码块及整表的尺寸与整体居中、多块框选/复制/拖动，以及逐表重复表头。整表选中后的文字对齐覆盖全部单元格。这些是页然当前实现的排版与块操作，不表示与 Typora 的行为完全一致。详见 [1.0.7 说明](PATCH_NOTES_1.0.7.md)。
+
+本地 1.0.10 补齐对象靠左/居中/靠右，精简表格“…”及正文右键菜单；框选仅从正文栏左右外侧启动，栏内拖动保持文字选择。表格选中边框按页绘制，未改变普通代码块分页。详见 [1.0.10 说明](PATCH_NOTES_1.0.10.md)。
+
 下表“已有”指本项目有对应能力，并不代表实现细节与 Typora 完全一致。官方基准：[Markdown 参考](https://support.typora.io/Markdown-Reference/)、[快捷键](https://support.typora.io/Shortcut-Keys/)、[数学功能](https://support.typora.io/Math/)、[图表](https://support.typora.io/Draw-Diagrams-With-Markdown/)。
 
 | 功能 | 页然当前状态 | 核查结果与限制 |
@@ -30,7 +34,7 @@
 | 块级公式 | 部分 | KaTeX，点击编辑 LaTeX；不等于 MathJax 的全部扩展 |
 | 行内公式 | 已有 | `$x^2$`，点击编辑、懒加载渲染，打印嵌入字体 |
 | 公式编号、跨公式引用、mhchem 等 | 未实现 | 未提供 Typora 数学工具集 |
-| Mermaid / sequence / flowchart | 未实现 | 围栏代码可保留，不能渲染图表 |
+| Mermaid / sequence / flowchart | 1.0.5 本地测试版使用完整版 Mermaid | 流程、时序、类、状态、ER、甘特、饼图、mindmap、architecture、ELK 与内嵌公式已验证；支持 HTML 标签换行、四角等比调尺寸、尺寸保存/打印与整图换页。旧式独立 sequence / flow 围栏不转换 |
 | 脚注及悬浮预览 | 基础已有 | 引用、定义、多段正文与悬浮文字提示；定义留在文稿位置，不是每页页底脚注系统 |
 | 文内自动目录 `[TOC]` | 已有 | 标题修改自动更新；链接定位六级标题 |
 | 文档侧栏大纲 | 已有 | 点击定位标题，显示全部六级标题 |
