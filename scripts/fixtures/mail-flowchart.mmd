@@ -1,0 +1,18 @@
+flowchart TD
+    A["寄件人的客户端<br/>创建发件对象"] --> B["客户端写属性<br/>示例中此时已写 Delivery"]
+    B --> C["RopSubmitMessage"]
+    C --> D["Exchange 处理提交<br/>Client Submit = 当时 UTC"]
+    D --> E["生成 MIME<br/>用 Client Submit 生成 Header Date"]
+    E --> F["发出"]
+    F --> G["复制进 Sent Items<br/>保留已写好的属性"]
+    F --> H["SMTP 中转<br/>只追加 Received"]
+    H --> I["收件服务器"]
+    I --> J{"Header Date 有效?"}
+    J -->|有效| K["Client Submit = Date 的 UTC"]
+    J -->|缺失或无效| L["Client Submit = 转换当时的 UTC"]
+    I --> M["Delivery = 接收当时的 UTC"]
+    K --> N["Inbox 对象"]
+    L --> N
+    M --> N
+    N --> P["Purview 导出<br/>PST 带属性, Items.csv 带元数据列"]
+    G --> P
