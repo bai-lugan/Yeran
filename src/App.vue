@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { t, locale } from './i18n'
 import { themePreference } from './theme'
+import { resetMermaidViews } from './mermaid'
 import { computed, markRaw, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
 import { EditorContent, Editor } from '@tiptap/vue-3'
-import { TextSelection } from '@tiptap/pm/state'
+import { TextSelection,NodeSelection } from '@tiptap/pm/state'
 import { EditorState } from '@tiptap/pm/state'
 import { FileText, PanelLeft, FolderOpen, FilePlus2, Save, Download, SlidersHorizontal, Bold, Italic, Strikethrough, List, ListOrdered, Quote, Code2, ImagePlus, Table2, Undo2, Redo2, Minus, Plus, Check, X, AlignLeft, Braces, Maximize2, CircleHelp, Printer, Eye, Files, ChevronDown, Pilcrow, Heading1, Heading2, Heading3, Heading4, Heading5, Heading6 } from 'lucide-vue-next'
 import { extensions, getMarkdown as getBodyMarkdown } from './editor'
@@ -13,6 +14,7 @@ import { loadWorkspace, newTab, persistWorkspace, splitFrontmatter, type Documen
 import { useSlashMenu } from './slash'
 import SlashMenu from './components/SlashMenu.vue'
 import TableControls from './components/TableControls.vue'
+import EditorContextMenu from './components/EditorContextMenu.vue'
 import { tableContext as getTableContext, readTableWidths, restoreTableWidths } from './table'
 import { CellSelection } from '@tiptap/pm/tables'
 import { Search, History, RotateCw, FileInput, FileOutput, FolderOutput } from 'lucide-vue-next'
@@ -27,10 +29,14 @@ import { releaseBundleURLs,bundleAssetURL,getBundle } from './textbundle'
 import{openUrl}from'@tauri-apps/plugin-opener'
 import { browserHandles } from './file-handles'
 import ImageResize from './components/ImageResize.vue'
+import TableResize from './components/TableResize.vue'
+import BlockLayoutControls from './components/BlockLayoutControls.vue'
 import { hasEmbeddedImages } from './image-resources'
 import { Focus } from 'lucide-vue-next'
 import { toggleRed } from './colors'
 import BlockControls from './components/BlockControls.vue'
+import BlockMarquee from './components/BlockMarquee.vue'
+import BlockSelectionFrames from './components/BlockSelectionFrames.vue'
 import FilePanel from './components/FilePanel.vue'
 import QuickOpen from './components/QuickOpen.vue'
 import { rememberFile,rememberRename,renameDocument,renameName,samePath,parentPath,type RenameTarget,type SearchHit } from './library'
@@ -82,6 +88,7 @@ const writingMenu = ref(false)
 const autoPair = ref(readJson<boolean>('yeran.auto-pair.v1')!==false)
 const editor = shallowRef<Editor>()
 const tableTools = ref<InstanceType<typeof TableControls>>()
+async function showTableContext(point:{x:number;y:number;kind:'row'|'column'|'all'}){refreshSelection();await nextTick();void tableTools.value?.openContext(point.x,point.y,point.kind)}
 const textTools = ref<InstanceType<typeof TextMenu>>()
 const findPanel = ref<InstanceType<typeof FindPanel>>()
 const filePanel = ref<InstanceType<typeof FilePanel>>()
@@ -251,6 +258,7 @@ async function replaceDocument(markdown: string, newPath: string | null, newModi
   // New/open documents start with their own undo history.
   const ed = editor.value
   ed.view.updateState(EditorState.create({ schema: ed.schema, doc: ed.state.doc, plugins: ed.state.plugins }))
+  resetMermaidViews(ed.view.dom)
   syncMixedPages()
   dirty.value = isDirty
   diskContent.value = isDirty ? null : getMarkdown(editor.value)
@@ -286,6 +294,7 @@ async function activateTab(id: string, capture = true) {
   syncMixedPages()
   toast.value = ''; error.value = ''
   recoveryStatus.value = tab.dirty ? '草稿已保护' : tab.path ? '已保存' : '未保存到文件'
+  resetMermaidViews(editor.value.view.dom)
   await nextTick(); scheduleStats()
   editor.value.view.focus()
   if (scroller.value) scroller.value.scrollTop = scroll
@@ -333,6 +342,12 @@ async function openLibraryFile(file:{path?:string;handleKey?:string;tabId?:strin
     if(existing){await activateTab(existing.id);rememberFile(file.path,file.handleKey);return true}
     busy.value=true;const doc=await readDocument(file.path,file.handleKey);busy.value=false;captureCurrent();const tab=newTab(doc.content,doc.path,doc.modified);tab.handleKey=doc.handleKey;tab.bundleKey=doc.bundleKey;tab.format=doc.format;adoptTextMeta(tab,doc);tabs.value.push(tab);await activateTab(tab.id,false);rememberFile(doc.path,doc.handleKey);notify(`已打开 ${title.value}`);return true
   }catch(e){report(e);return false}finally{busy.value=false}
+}
+async function saveSidebarFileAs(file:{path?:string;handleKey?:string;tabId?:string}){
+  if(busy.value)return
+  const tab=file.tabId?tabs.value.find(tab=>tab.id===file.tabId):tabs.value.find(tab=>samePath(tab.path,file.path))
+  if(tab){await save(true,tab.id);return}
+  if(await openLibraryFile(file))await save(true)
 }
 async function renameFile(target:RenameTarget,name:string):Promise<string|null>{
   if(busy.value)throw Error('正在处理文稿，请稍后重试。')
@@ -643,6 +658,7 @@ async function applySource() {
   frontmatter.value = parts.head
   applyPageMetadata(parts)
   editor.value.commands.setContent(safeMarkdown(parts.body), { contentType: 'markdown' })
+  resetMermaidViews(editor.value.view.dom)
   if (path.value) await resolveImages(editor.value, path.value,currentTab.value.bundleKey)
   sourceOpen.value = false; notify('已应用 Markdown 修改')
 }
@@ -704,16 +720,7 @@ onMounted(async () => {
         if(!event.clipboardData?.getData('text/html')&&!editor.value?.isActive('codeBlock')&&!editor.value?.isActive('table')&&/^(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\[TOC\]|\[\^)/im.test(text)){editor.value?.commands.insertContent(safeMarkdown(text),{contentType:'markdown'});return true}return false },
       handleDrop(_view, event, _slice, moved) { if(plain.value)return false; if (moved) return false; const file = event.dataTransfer?.files[0]; if (file?.type.startsWith('image/')) { void insertImage(file); return true } return false },
       handleKeyDown: slash.keyDown,
-      handleDOMEvents: {
-        contextmenu(view, event) {
-          const cell = (event.target as Element).closest?.('td,th')
-          if (!cell || !editor.value) return false
-          event.preventDefault()
-          if (!(view.state.selection instanceof CellSelection && cell.classList.contains('selectedCell'))) editor.value.commands.setTextSelection(view.posAtDOM(cell, 0) + 1)
-          scheduleStats(); void nextTick(() => { refreshSelection(); void nextTick(() => tableTools.value?.openContext(event.clientX, event.clientY)) })
-          return true
-        },
-      },
+
     },
     onUpdate() { dirty.value = true; scheduleDraft(); scheduleStats() },
     onSelectionUpdate: refreshSelection, onTransaction: scheduleStats,
@@ -842,7 +849,7 @@ onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('p
             <button class="auto-pair-toggle" role="menuitemcheckbox" :aria-checked="autoPair" @click="autoPair=!autoPair"><span><strong>{{t('自动配对')}}</strong><small>{{t('括号、引号与 Markdown 标记')}}</small></span><Check v-if="autoPair" :size="16" /></button>
           </section>
         </div>
-        <ImageResize v-if="editor&&!plain" :editor="editor" /><TextMenu v-if="editor&&!plain" ref="textTools" :editor="editor" /><BlockControls v-if="editor&&!plain" :editor="editor" />
+        <EditorContextMenu v-if="editor" :editor="editor" @error="report" @opening="tableTools?.close()" @table="showTableContext" /><ImageResize v-if="editor&&!plain" :editor="editor" /><TableResize v-if="editor&&!plain" :editor="editor" /><TextMenu v-if="editor&&!plain" ref="textTools" :editor="editor" /><BlockControls v-if="editor&&!plain" :editor="editor" @insert="slash.openAtSelection()" @error="report" @copied="notify('已复制到剪贴板')" /><BlockSelectionFrames v-if="editor&&!plain" :editor="editor" /><BlockMarquee v-if="editor&&!plain" :editor="editor" @error="report" @copied="notify('已复制到剪贴板')" />
         <span class="tool-divider" aria-hidden="true"></span>
         <button class="icon-btn" :aria-label="t('查找与替换')" :title="t('查找 Ctrl+F · 替换 Ctrl+H')" @click="openFind(true)"><Search :size="17" /></button>
         <button v-if="!plain" class="icon-btn" :aria-label="t('插入分页符')" :title="t('插入分页符 · Ctrl+Enter')" :disabled="active('table')" @mousedown.prevent @click="insertPageBreak"><FileInput :size="17" /></button>
@@ -854,13 +861,13 @@ onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('p
         <button class="icon-btn help-action" :title="t('使用帮助')" :aria-label="t('使用帮助')" @click="showHelp = true"><CircleHelp :size="17" /></button>
       </div>
     </div>
-    <aside class="outline-panel"><div class="sidebar-switch"><button :class="{selected:sidebarPane==='files'}" @click="sidebarPane='files'">{{t('文件')}}</button><button :class="{selected:sidebarPane==='outline'}" @click="sidebarPane='outline'">{{t('大纲')}}</button></div><FilePanel ref="filePanel" :rename-file="renameFile" :busy="busy" @new-document="newDocument()" v-show="sidebarPane==='files'" :tabs="tabs.map(tab=>({id:tab.id,label:tabLabel(tab),path:tab.path,dirty:tab.dirty}))" :active-id="activeId" :active-path="path" @open="openLibraryFile" @hit="openSearchHit" @error="report" @close="id=>closeTabs([id])" @save-all="saveAll"/><template v-if="sidebarPane==='outline'">
+    <aside class="outline-panel"><div class="sidebar-switch"><button :class="{selected:sidebarPane==='files'}" @click="sidebarPane='files'">{{t('文件')}}</button><button :class="{selected:sidebarPane==='outline'}" @click="sidebarPane='outline'">{{t('大纲')}}</button></div><FilePanel ref="filePanel" :rename-file="renameFile" :busy="busy" @new-document="newDocument()" v-show="sidebarPane==='files'" :tabs="tabs.map(tab=>({id:tab.id,label:tabLabel(tab),path:tab.path,dirty:tab.dirty}))" :active-id="activeId" :active-path="path" @open="openLibraryFile" @save-as="saveSidebarFileAs" @hit="openSearchHit" @error="report" @close="id=>closeTabs([id])" @save-all="saveAll"/><template v-if="sidebarPane==='outline'">
       <div class="outline-heading"><AlignLeft :size="15" /><span>{{ t('文档大纲') }}</span><span class="heading-count">{{ headings.length }}</span></div>
       <nav :aria-label="t('文档大纲')"><button v-for="heading in headings" :key="heading.pos" :class="['outline-item', { active: selectedHeading === heading.pos }]" :style="{ paddingLeft: `${16 + (heading.level - 1) * 14}px` }" @click="jump(heading.pos)"><span :class="`outline-level level-${heading.level}`"></span><span>{{ heading.text }}</span></button><p v-if="plain" class="outline-empty">{{t('纯文本不生成标题大纲。')}}</p><p v-else-if="!headings.length" class="outline-empty">{{ t('添加标题后，') }}<br>{{ t('会在这里显示文档结构。') }}</p></nav>
     </template></aside>
     <main ref="scroller" class="canvas" @click.self="settings = false">
       <div v-if="currentTab.diskChanged || currentTab.diskMissing" class="external-change-bar" role="status"><span>{{ t(currentTab.diskMissing ? '文件已移走或删除，当前内容仍保留。保存可重建文件。' : '文件已在外部修改，当前编辑仍保留。') }}</span><button v-if="!currentTab.diskMissing" class="text-btn" @click="reloadFromDisk">{{ t('重新加载') }}</button><button class="text-btn" @click="save(true)">{{ t('另存为') }}</button><button class="icon-btn" :aria-label="t('暂时保留当前内容')" @click="ignoreExternal"><X :size="15" /></button></div>
-      <div class="canvas-meta" :class="{ 'table-meta': tableContext }" :style="{ maxWidth: `${paper.width}px` }"><TableControls v-if="editor && tableContext" ref="tableTools" :editor="editor" :context="tableContext" /><ImageControls v-else-if="editor && active('image')" :editor="editor" :version="version" @replace="beginImageReplacement" /><template v-else><span><span class="live-dot"></span>{{ t(viewMode === 'continuous' ? '连续编辑' : '分页编辑') }}</span><span><template v-if="viewMode==='pages'">A4 <span class="meta-separator">/</span></template> {{ viewMode === 'continuous' ? t('不分页') : mixed ? t('横竖混排') : layout.orientation === 'landscape' ? '297 × 210' : '210 × 297' }}{{ mixed || viewMode === 'continuous' ? '' : ' mm' }}</span></template></div>
+      <div class="canvas-meta" :class="{ 'table-meta': tableContext }" :style="{ maxWidth: `${paper.width}px` }"><TableControls v-if="editor && tableContext" ref="tableTools" :editor="editor" :context="tableContext" /><ImageControls v-else-if="editor && active('image')" :editor="editor" :version="version" @replace="beginImageReplacement" /><template v-else><span><span class="live-dot"></span>{{ t(viewMode === 'continuous' ? '连续编辑' : '分页编辑') }}</span><span><template v-if="viewMode==='pages'">A4 <span class="meta-separator">/</span></template> {{ viewMode === 'continuous' ? t('不分页') : mixed ? t('横竖混排') : layout.orientation === 'landscape' ? '297 × 210' : '210 × 297' }}{{ mixed || viewMode === 'continuous' ? '' : ' mm' }}</span></template><BlockLayoutControls v-if="editor&&!plain" :editor="editor" :version="version" /></div>
       <div class="paper-zoom" :style="{ zoom: effectiveZoom, width: `${paper.width}px` }"><EditorContent v-if="editor" :editor="editor" :style="{...documentStyle,'--continuous-width':`${paper.width}px`}" /></div>
       <div class="canvas-tail"><span>{{ t('文稿到这里，想法还可以继续。') }}</span></div>
     </main>
@@ -874,7 +881,6 @@ onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('p
       <label>{{ t('正文字体') }}<select :aria-label="t('正文字体')" v-model="layout.font"><option value="sans">{{ t('微软雅黑 / 系统黑体') }}</option><option value="serif">{{ t('宋体 / 系统衬线') }}</option></select></label>
       <div class="settings-columns"><label>{{ t('字号') }}<select :aria-label="t('字号')" v-model.number="layout.fontSize"><option v-for="size in [14,16,18,20]" :value="size">{{ size }} px</option></select></label><label>{{ t('行距') }}<select :aria-label="t('行距')" v-model.number="layout.lineHeight"><option v-for="line in [1.5,1.8,2]" :value="line">{{ line }}{{ t(' 倍') }}</option></select></label></div>
       <label>{{ t('四周页边距') }}<select :aria-label="t('页边距')" v-model.number="layout.margin"><option v-for="margin in [15,20,25,30]" :value="margin">{{ margin }} mm{{ t(margin === 20 ? ' · 标准' : '') }}</option></select></label><button class="reset-btn" @click="layout = { ...DEFAULT_LAYOUT }">{{ t('恢复默认排版') }}</button>
-      <label class="checkbox-row"><input type="checkbox" v-model="layout.repeatTableHeaders" :aria-label="t('跨页重复表头')">{{ t('跨页重复表头') }}</label>
       <details class="print-settings"><summary>{{t('打印页眉与页脚')}}</summary><p>{{t('在打印预览、打印和 PDF 中生效')}}</p><div class="settings-columns"><label>{{t('页眉左侧')}}<input :aria-label="t('页眉左侧')" maxlength="160" v-model="printSettings.headerLeft"></label><label>{{t('页眉右侧')}}<input :aria-label="t('页眉右侧')" maxlength="160" v-model="printSettings.headerRight"></label></div><div class="settings-columns"><label>{{t('页脚左侧')}}<input :aria-label="t('页脚左侧')" maxlength="160" v-model="printSettings.footerLeft"></label><label>{{t('页脚右侧')}}<input :aria-label="t('页脚右侧')" maxlength="160" v-model="printSettings.footerRight"></label></div><p class="print-variables">{title} · {page} / {pages} · {date}</p><label class="checkbox-row"><input type="checkbox" v-model="printSettings.bookmarks">{{t('从标题生成 PDF 书签')}}</label></details>
     </section></Transition>
     <div v-if="error" class="error-message" role="alert"><span>{{ t(error) }}</span><button :aria-label="t('关闭错误提示')" @click="error = ''"><X :size="16" /></button></div>

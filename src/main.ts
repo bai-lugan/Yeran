@@ -1,6 +1,10 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import './style.css'
+import './pagination-fixes.css'
+import './mermaid.css'
+import './block-controls.css'
+import './object-layout.css'
 import './theme'
 import './theme.css'
 // Tiptap owns DOM and undo state outside Vue. Hot-remounting shared components

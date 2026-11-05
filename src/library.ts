@@ -68,7 +68,10 @@ export async function createLibraryEntry(parent:string,raw:string,directory:bool
 }
 export async function openLibraryFolder(path=libraryRoot.value){
  if(!native)throw Error('请使用桌面版打开 Windows 文件夹。')
- await invoke('open_library_folder',{root:libraryRoot.value,path})
+ if(!path)throw Error('请先保存文稿或选择文件夹。')
+ // Open editors can live outside the workspace, or without a workspace at all.
+ const root=withinFolder(path,libraryRoot.value)?libraryRoot.value:path
+ try{await invoke('open_library_folder',{root,path})}catch(error){if(/\(os error [23]\)|NotFoundError/.test(String(error)))throw Error('文件夹已移走或删除，请重新选择文件夹。');throw error}
 }
 export async function refreshLibrary(){if(!libraryRoot.value)return[];if(native){const data=await invoke<{files:LibraryEntry[];truncated:boolean}>('index_folder',{root:libraryRoot.value});libraryIndex.value=data.files;indexLimited.value=data.truncated}else{const files:LibraryEntry[]=[],queue=[libraryRoot.value];let count=0;while(queue.length&&files.length<5000&&++count<2000){for(const entry of await folderChildren(queue.shift()!)){if(entry.directory)queue.push(entry.path);else files.push(entry)}}libraryIndex.value=files;indexLimited.value=queue.length>0}return libraryIndex.value}
 export async function searchLibrary(query:string,sensitive=false):Promise<{results:SearchHit[];truncated:boolean;scanned:number}>{

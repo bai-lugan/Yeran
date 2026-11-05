@@ -1,0 +1,43 @@
+.paper-editor .paged-table[data-table-sized]>.table-plus>tr,.paper-editor .paged-table[data-table-sized]>.table-plus>tbody>tr{zoom:var(--yeran-table-scale);width:var(--yeran-table-layout-width)!important;min-width:0!important}
+.paper-editor .paged-table[data-block-align="center"]>.table-plus>tr,.paper-editor .paged-table[data-block-align="center"]>.table-plus>tbody>tr{margin-left:auto;margin-right:auto}
+.paper-editor .paged-table[data-block-align="right"]>.table-plus>tr,.paper-editor .paged-table[data-block-align="right"]>.table-plus>tbody>tr{margin-left:auto;margin-right:0}
+.paper-editor .paged-table:is(.ProseMirror-selectednode,.yeran-block-selected){outline:none!important;background:transparent!important}
+.table-resize-handle{position:fixed;z-index:26}
+.block-resize-output{position:fixed;z-index:28;pointer-events:none;padding:4px 8px;border-radius:4px;background:#33445b;color:white;font-size:11px;white-space:nowrap}
+.object-layout-controls{display:flex;gap:2px;flex:none}
+.paper-editor img{margin-left:0;margin-right:auto}
+.paper-editor:not(.mixed-page-doc) .code-block[data-block-align="center"]{margin-left:auto;margin-right:auto}
+.paper-editor:not(.mixed-page-doc) .code-block[data-block-align="right"]{margin-left:auto;margin-right:0}
+@media print{.table-resize-handle,.table-resize-frame,.block-resize-output{display:none!important}}
+.code-resize-handles{position:absolute;pointer-events:none;opacity:0}
+.code-block:hover>.code-resize-handles,.code-block:focus-within>.code-resize-handles,.code-block.code-resizing>.code-resize-handles{opacity:1}
+.paper-editor .code-sized{display:flow-root;max-width:100%}
+.paper-editor .code-sized>.code-controls{position:static;flex-wrap:wrap;margin-bottom:8px}
+.paper-editor .code-sized>pre{padding:12px;max-width:none;min-width:0}
+.code-printing>.code-controls,.code-printing>.code-resize-handles{display:none!important}
+@media print{.code-resize-handles{display:none!important}}
+.block-marquee{position:fixed;z-index:23;border:1px solid #7fa3e6;background:#7cacf32b;pointer-events:none}
+.block-marquee-active,.block-marquee-active *{user-select:none!important}
+.paper-editor .yeran-block-selected:not(.paged-table),.paper-editor .ProseMirror-selectednode:not(.paged-table):not(img){background-color:#dbeafe80;outline:1px solid #7fa3e680}
+.paper-editor .paged-table.yeran-block-selected :is(td,th){box-shadow:inset 0 0 0 999px #77a8ed33}
+.block-selection-tools{position:fixed;bottom:46px;left:50%;transform:translateX(-50%);z-index:29;display:flex;align-items:center;gap:4px;padding:6px 8px;background:#fff;border:1px solid #dce2ed;border-radius:7px;box-shadow:0 5px 25px #23344d22;font-size:12px;white-space:nowrap}
+.block-selection-tools>span{color:#7a879c;padding:0 8px}
+.block-selection-tools button{display:flex;align-items:center;gap:5px;padding:6px 8px;border-radius:4px}
+.block-selection-tools button:hover{background:#edf2fc}
+:root[data-theme="dark"] .paper-editor .yeran-block-selected:not(.paged-table),:root[data-theme="dark"] .paper-editor .ProseMirror-selectednode:not(.paged-table):not(img){background-color:#42639c66;outline-color:#93b6ef88}
+:root[data-theme="dark"] .block-selection-tools{background:#272e3b;border-color:#455269;color:#cbd8ed}
+:root[data-theme="dark"] .block-selection-tools button:hover{background:#3b4a65}
+@media print{.block-marquee,.block-selection-tools{display:none!important}.yeran-block-selected{outline:none!important;background:transparent!important}}
+.block-dragging :is(.image-resize-frame,.image-resize-handle,.block-selection-tools){display:none!important}
+.block-drag-ghost{max-height:320px;overflow:hidden}
+.block-drag-ghost .table-plus{display:contents}
+.paper-editor .yeran-selection-fragments{background:transparent!important;outline:none!important}
+.block-selection-fragment{position:fixed;z-index:20;pointer-events:none;background:#7cacf326;border:1px solid #7fa3e680;box-sizing:border-box}
+:root[data-theme="dark"] .block-selection-fragment{background:#42639c55;border-color:#93b6ef88}
+.block-dragging .block-selection-fragment,.block-marquee-active .block-selection-fragment{display:none}
+@media print{.block-selection-fragment{display:none!important}}
+.editor-context-menu{width:236px;outline:none}
+.editor-context-menu .object-layout-controls{padding:4px 8px;gap:5px}
+.editor-context-menu .object-layout-controls>button{width:32px;height:30px;padding:6px;justify-content:center}
+.editor-context-menu button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+@media print{.editor-context-menu{display:none!important}}

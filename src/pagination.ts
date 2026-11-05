@@ -5,7 +5,27 @@ import { DOMSerializer, type Node as PMNode } from '@tiptap/pm/model'
 import { getPageSlices } from './document'
 import { t, locale } from './i18n'
 import { watch } from 'vue'
+import { PaginationPlus } from 'tiptap-pagination-plus'
 declare module '@tiptap/core' { interface Storage { paginationFeatures: {repeatTableHeaders:boolean} } }
+
+// Keep float-clearing spacers outside inline marks. The upstream widget inherits
+// the next mark, placing a display:table span inside <code> and hiding its caret.
+export const CaretSafePagination = PaginationPlus.extend({
+  addProseMirrorPlugins() {
+    const plugins = (this.parent?.() || []).filter(plugin => !String((plugin as Plugin & {key:string}).key).startsWith('brDecoration$'))
+    const key = new PluginKey('yeranLineBreaks')
+    function build(doc: PMNode) {
+      const widgets: Decoration[] = []
+      doc.descendants((node,pos) => {
+        if(node.type.name==='hardBreak') widgets.push(Decoration.widget(pos+1,() => {
+          const span=document.createElement('span');span.className='yeran-line-break-spacer';span.setAttribute('aria-hidden','true');return span
+        }, {side:-1,marks:[],ignoreSelection:true,key:`break-${pos}`}))
+      })
+      return DecorationSet.create(doc,widgets)
+    }
+    return [...plugins,new Plugin({key,state:{init:(_,state)=>build(state.doc),apply:(tr,previous)=>tr.docChanged?build(tr.doc):previous},props:{decorations(state){return key.getState(state)}}})]
+  },
+})
 
 export const ManualPageBreak = Node.create({
   name: 'pageBreak', group: 'block', atom: true, selectable: true,
@@ -77,8 +97,9 @@ export const PaginationFeatures = Extension.create<{ repeatTableHeaders: boolean
           })
           const slices = getPageSlices(root), repeats: Repeat[] = []
           const pageAt = (top: number) => Math.max(0, slices.findIndex(slice => top < slice.top + slice.height - 1))
-          if (options.repeatTableHeaders) view.state.doc.descendants((table, pos) => {
+          view.state.doc.descendants((table, pos) => {
             if (table.type.name !== 'table') return
+            if(!(table.attrs.repeatHeader??options.repeatTableHeaders))return false
             const header = table.firstChild
             if (!header || header.childCount === 0 || ![...Array(header.childCount)].every((_,i) => header.child(i).type.name === 'tableHeader')) return false
             const wrapper = view.nodeDOM(pos) as HTMLElement | null

@@ -112,7 +112,7 @@ Object.assign(english, {
   "在表格末尾添加列": "Add column at end of table",
   "块操作": "Block actions",
   "拖动块或点击打开菜单": "Drag block or click for actions",
-  "复制块": "Duplicate block",
+  "复制块": "Copy block",
   "上移块": "Move block up",
   "下移块": "Move block down",
   "删除块": "Delete block",
@@ -175,6 +175,21 @@ Object.assign(english, {
   "单元格底色": "Cell background"
 })
 const charMap = new Map(Object.entries(traditionalMap))
+Object.assign(english,{
+  'Mermaid 图表':'Mermaid diagram','用代码绘制流程图与时序图':'Draw flowcharts and sequence diagrams with code',
+  '编辑图表':'Edit diagram','查看图表':'View diagram','点击编辑图表':'Click to edit diagram',
+  '输入 Mermaid 代码以生成图表':'Enter Mermaid code to draw a diagram',
+  '图表语法有误，请检查 Mermaid 代码。':'Invalid diagram. Check the Mermaid syntax.',
+  'Mermaid 图表预览':'Mermaid diagram preview','放大图表':'Zoom in diagram','缩小图表':'Zoom out diagram','实际大小':'Actual size','关闭图表预览':'Close diagram preview',
+  '添加块':'Add block','在下方插入块':'Insert block below','查看缩放':'View zoom','图表缩放':'Diagram zoom','仅调整查看大小，打印仍按分页布局输出':'Zoom for viewing; printing uses the page layout.','缩小页面中的图表':'Zoom out diagram in page','放大页面中的图表':'Zoom in diagram in page','重置图表缩放':'Reset diagram zoom',
+  '点击选中整表；拖动移动选中块；Delete / Backspace 删除':'Select table; drag to move selected blocks; Delete / Backspace to remove',
+  '图表尺寸':'Diagram size','拖动调整图表尺寸':'Drag to resize diagram','拖动等比缩放图表':'Drag to resize diagram proportionally','拖动四角等比调整，尺寸随文稿保存并用于打印':'Drag a corner to resize proportionally. Size is saved with the document and used for printing.',
+  '删除所选行':'Delete selected rows','删除所选列':'Delete selected columns','请先保存文稿或选择文件夹。':'Save the document or choose a folder first.','文件夹已移走或删除，请重新选择文件夹。':'The folder was moved or deleted. Choose a folder again.',
+  '拖动缩放整个表格':'Drag to resize entire table','拖动等比缩放表格和文字':'Drag to resize the table and its contents proportionally','图片居中':'Center image','表格整体居中':'Center table block','图表居中':'Center diagram','代码块居中':'Center code block','再次点击恢复靠左':'Click again to align left','重置块尺寸':'Reset block size','块布局':'Block layout','拖动调整代码块尺寸':'Drag to resize code block','拖动等比缩放代码和文字':'Drag to resize code and text proportionally',
+  '创建副本':'Duplicate','选中块操作':'Selected block actions','个块':'blocks','复制选中块':'Copy selected blocks','创建选中块副本':'Duplicate selected blocks','删除选中块':'Delete selected blocks','复制':'Copy','删除':'Delete',
+  '整表居中':'Center all table cells','整表左对齐':'Align all table cells left','整表右对齐':'Align all table cells right','已复制到剪贴板':'Copied to clipboard'
+})
+Object.assign(english,{'图片靠左':'Align image left','图片靠右':'Align image right','图表靠左':'Align diagram left','图表靠右':'Align diagram right','表格整体靠左':'Align table block left','表格整体靠右':'Align table block right','代码块靠左':'Align code block left','代码块靠右':'Align code block right','表格设置':'Table settings','均分列宽':'Distribute columns evenly','编辑菜单':'Edit menu','剪切':'Cut','粘贴':'Paste','粘贴为纯文本':'Paste as plain text','全选':'Select all','无法访问剪贴板，请使用 Ctrl+V 粘贴。':'Clipboard access failed. Use Ctrl+V to paste.'})
 function hant(value: string) { return value.replace(/文件历史/g,'檔案歷程').replace(/文件/g,'檔案').replace(/保存/g,'儲存').replace(/源码/g,'原始碼').replace(/界面/g,'介面').replace(/鼠标/g,'滑鼠').replace(/撤销/g,'復原').replace(/替换/g,'取代').replace(/打印/g,'列印').replace(/导出/g,'匯出').replace(/查找/g,'尋找').replace(/链接/g,'連結').split('').map(char=>charMap.get(char)||char).join('') }
 export function t(value: unknown): string {
   const text = String(value ?? '')
@@ -188,7 +203,7 @@ export function t(value: unknown): string {
     [/^关闭 (.+)$/s,m=>`Close ${m[1]}`], [/^未命名 (\d+)\.(md|txt)$/,m=>`Untitled ${m[1]}.${m[2]}`], [/^已保存 (.+)$/s,m=>`Saved ${m[1]}`], [/^已打开 (.+)$/s,m=>`Opened ${m[1]}`], [/^历史 · (.+)$/s,m=>`History · ${m[1]}`], [/^保留稿 · (.+)$/s,m=>`Retained draft · ${m[1]}`],
   ]
   if (locale.value === 'zh-TW') {
-    const themeLabels:Record<string,string>={'外观主题':'外觀主題','跟随系统（默认）':'跟隨系統（預設）','浅色':'淺色','深色':'深色'}
+    const themeLabels:Record<string,string>={'外观主题':'外觀主題','跟随系统（默认）':'跟隨系統（預設）','浅色':'淺色','深色':'深色','实际大小':'實際大小','Mermaid 图表预览':'Mermaid 圖表預覽','关闭图表预览':'關閉圖表預覽','放大图表':'放大圖表','缩小图表':'縮小圖表'}
     if(themeLabels[raw])return prefix+themeLabels[raw]+suffix
     const fileMessage = /^(关闭 |已保存 |已打开 |历史 · |保留稿 · )(.+)$/s.exec(raw)
     return prefix + (fileMessage ? hant(fileMessage[1]!) + fileMessage[2] : hant(raw)) + suffix

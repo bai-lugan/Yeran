@@ -8,6 +8,10 @@ import type { NodeView, ViewMutationRecord } from '@tiptap/pm/view'
 import { t, locale } from './i18n'
 import { watch } from 'vue'
 import { colorValue } from './colors'
+import {blockAlignAttribute,blockAlignStyle} from './block-geometry'
+import {applyTableSize,tableWidthAttribute,tableScaleAttribute} from './table-sizing'
+import {BlockSelection} from './block-selection'
+import {blockViewport} from './block-fragments'
 
 const TABLE_GRIP_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>'
 
@@ -34,7 +38,7 @@ export function tableContext(editor: Editor) {
 }
 
 export type TableSelectionKind = 'row' | 'column' | null
-const tableSelectionKey = new PluginKey<TableSelectionKind>('yeranTableSelection')
+export const tableSelectionKey = new PluginKey<TableSelectionKind>('yeranTableSelection')
 export function selectTable(editor: Editor, pos = tableContext(editor)?.pos) {
   if (typeof pos !== 'number') return false
   editor.view.dispatch(editor.state.tr.setSelection(NodeSelection.create(editor.state.doc, pos))); editor.view.focus(); return true
@@ -73,12 +77,13 @@ export function hasMergedCells(table: PMNode) {
   })
   return merged
 }
-export function tableAction(editor:Editor,action:'appendRow'|'appendColumn'|'duplicateRow'|'duplicateColumn'|'fit'|'clear',pos=tableContext(editor)?.pos,index?:number){
+export function tableAction(editor:Editor,action:'appendRow'|'appendColumn'|'duplicateRow'|'duplicateColumn'|'fit'|'equalize'|'clear',pos=tableContext(editor)?.pos,index?:number){
   if(typeof pos!=='number')return false
   const table=editor.state.doc.nodeAt(pos);if(!table||table.type.name!=='table')return false
   const context=tableContext(editor),map=TableMap.get(table),rows:PMNode[]=[];table.forEach(row=>rows.push(row))
   const at=index??(action==='duplicateRow'?(context?.row||1)-1:(context?.column||1)-1)
-  if(action==='fit'){editor.view.dispatch(closeHistory(editor.state.tr).setNodeMarkup(pos,undefined,{...table.attrs,columnSize:''}));return true}
+ if(action==='fit'){editor.view.dispatch(closeHistory(editor.state.tr).setNodeMarkup(pos,undefined,{...table.attrs,columnSize:'',tableWidth:null,tableScale:1}));return true}
+ if(action==='equalize'){const tr=closeHistory(editor.state.tr).setNodeMarkup(pos,undefined,{...table.attrs,columnSize:''});if(editor.state.selection instanceof NodeSelection)tr.setSelection(NodeSelection.create(tr.doc,pos));editor.view.dispatch(tr);return true}
   if(action==='clear'){
     const targets=new Set<number>(),selection=editor.state.selection
     if(selection instanceof CellSelection)selection.forEachCell((_node,at)=>targets.add(at))
@@ -125,7 +130,11 @@ export function paintTableCells(editor:Editor,value:string,scope:'selection'|'ro
 function styledTableHTML(json:any,schema:Schema){
  const copy=structuredClone(json);function portable(node:any){if(node.type==='image'&&node.attrs?.originalSrc)node.attrs.src=node.attrs.originalSrc;node.content?.forEach(portable)}portable(copy)
  const element=DOMSerializer.fromSchema(schema).serializeNode(schema.nodeFromJSON(copy)) as HTMLElement
- element.querySelector('colgroup')?.remove();return element.outerHTML
+ element.querySelector('colgroup')?.remove()
+ const width=Number(json.attrs?.tableWidth),scale=Number(json.attrs?.tableScale)||1
+ if(width){element.style.width=width/scale+'px';element.style.zoom=String(scale);element.style.maxWidth='100%';element.style.tableLayout='fixed'}
+ if(blockAlignStyle(json.attrs?.blockAlign)){element.style.marginLeft='auto';element.style.marginRight=json.attrs.blockAlign==='center'?'auto':'0px'}
+ return element.outerHTML
 }
 export function moveTableColumn(editor: Editor, tablePos: number, from: number, insertAt: number) {
   const table = editor.state.doc.nodeAt(tablePos)
@@ -153,13 +162,20 @@ export function moveTableRow(editor: Editor, tablePos: number, from: number, ins
   const tr = closeHistory(editor.state.tr).replaceWith(tablePos, tablePos + table.nodeSize, table.copy(Fragment.fromArray(rows)))
   editor.view.dispatch(tr); selectTableRow(editor, tablePos, target); return true
 }
-function deleteTableSelection(editor: Editor) {
+export function tableSelectionKind(editor:Editor):'table'|TableSelectionKind{
+ const selection=editor.state.selection
+ if(selection instanceof NodeSelection&&selection.node.type.name==='table')return 'table'
+ return selection instanceof CellSelection?tableSelectionKey.getState(editor.state)||null:null
+}
+export function deleteTableSelection(editor: Editor) {
   const selection = editor.state.selection
-  if (selection instanceof NodeSelection && selection.node.type.name === 'table') return editor.commands.deleteSelection()
+  const chain=()=>editor.chain().command(({tr})=>{closeHistory(tr);return true})
+  if (selection instanceof NodeSelection && selection.node.type.name === 'table') return chain().deleteSelection().run()
   const kind = tableSelectionKey.getState(editor.state)
   if (!(selection instanceof CellSelection)) return false
-  if (kind === 'row') return editor.commands.deleteRow()
-  if (kind === 'column') return editor.commands.deleteColumn()
+  if(kind==='row'&&selection.isColSelection()||kind==='column'&&selection.isRowSelection())return chain().deleteTable().run()
+  if (kind === 'row') return chain().deleteRow().run()
+  if (kind === 'column') return chain().deleteColumn().run()
   return false
 }
 
@@ -168,16 +184,18 @@ export function alignTableColumn(editor: Editor, align: 'left' | 'center' | 'rig
   if (!context) return false
   const { map, table, pos } = context
   const selection = editor.state.selection
-  const rect = selection instanceof CellSelection
+  const rect = selection instanceof NodeSelection&&selection.node.type.name==='table'?{left:0,right:map.width}:selection instanceof CellSelection
     ? map.rectBetween(selection.$anchorCell.pos - pos - 1, selection.$headCell.pos - pos - 1)
     : { left: context.column - 1, right: context.column }
   const cells = map.cellsInRect({ left: rect.left, right: rect.right, top: 0, bottom: map.height })
-  const tr = editor.state.tr
+  const tr = closeHistory(editor.state.tr)
   for (const cell of cells) { const node = table.nodeAt(cell); if (node) tr.setNodeMarkup(pos + 1 + cell, undefined, { ...node.attrs, align }) }
   editor.view.dispatch(tr)
   editor.commands.focus(undefined, { scrollIntoView: false })
   return true
 }
+export function repeatTableHeader(editor:Editor){const c=tableContext(editor);return c?c.table.attrs.repeatHeader??editor.storage.paginationFeatures.repeatTableHeaders:false}
+export function toggleRepeatTableHeader(editor:Editor){const c=tableContext(editor);if(!c)return false;editor.view.dispatch(closeHistory(editor.state.tr).setNodeMarkup(c.pos,undefined,{...c.table.attrs,repeatHeader:!repeatTableHeader(editor)}));editor.view.focus();return true}
 
 export function leaveTable(editor: Editor) {
   const context = tableContext(editor)
@@ -235,6 +253,7 @@ class PagedTableView implements NodeView {
   private columnDropLine = document.createElement('div')
   private unwatch: () => void
   private scrolled=(event:Event)=>{if((event.target as HTMLElement)?.contains?.(this.dom))this.scheduleRows()}
+  private transaction=({transaction}:{transaction:import('@tiptap/pm/state').Transaction})=>{if(transaction.getMeta('yeranLayout'))this.scheduleRows()}
   constructor(private node: PMNode, private editor: Editor, private getPos: () => number | undefined) {
     this.dom.className = 'paged-table'
     this.contentDOM.className = 'table-plus'
@@ -243,9 +262,10 @@ class PagedTableView implements NodeView {
     this.dom.append(this.contentDOM, this.controls)
     const tableHandle = document.createElement('button')
     tableHandle.className = 'table-block-handle'; tableHandle.innerHTML = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M8 2v16"/></svg>'; tableHandle.type = 'button'
-    const labels = () => { tableHandle.title = t('选择整个表格，Delete / Backspace 删除'); tableHandle.setAttribute('aria-label', t('选择整个表格')); this.handles.forEach((handle,i) => handle.setAttribute('aria-label', t(`调整第 ${i+1} 列宽`))); this.labelRow(); this.labelColumn(); this.addRow.setAttribute('aria-label',t('在表格末尾添加行')); this.addColumn.setAttribute('aria-label',t('在表格末尾添加列')) }
+    const labels = () => { tableHandle.title = t('点击选中整表；拖动移动选中块；Delete / Backspace 删除'); tableHandle.setAttribute('aria-label', t('选择整个表格')); this.handles.forEach((handle,i) => handle.setAttribute('aria-label', t(`调整第 ${i+1} 列宽`))); this.labelRow(); this.labelColumn(); this.addRow.setAttribute('aria-label',t('在表格末尾添加行')); this.addColumn.setAttribute('aria-label',t('在表格末尾添加列')) }
     labels(); this.unwatch = watch(locale, labels)
-    tableHandle.addEventListener('pointerdown', event => { event.preventDefault(); const pos = this.getPos(); if (typeof pos === 'number') selectTable(editor, pos) })
+    tableHandle.addEventListener('pointerdown', event => { event.preventDefault(); const pos = this.getPos(); if (typeof pos === 'number') {const selection=editor.state.selection;if(!(selection instanceof BlockSelection&&selection.blocks.some(r=>r.from===pos)))selectTable(editor,pos);tableHandle.dispatchEvent(new CustomEvent('yeran:block-drag',{bubbles:true,detail:{pos,pointer:event}}))} })
+    tableHandle.addEventListener('click',event=>{if(event.detail===0)selectTable(editor,this.getPos())})
     // One shared row grip follows the hovered row, mirroring the single column grip.
     const rowHandle = document.createElement('button')
     rowHandle.type = 'button'; rowHandle.className = 'table-axis-handle table-row-handle'
@@ -291,11 +311,13 @@ class PagedTableView implements NodeView {
     this.controls.append(tableHandle, rowHandle, columnHandle, this.addRow, this.addColumn, this.dropLine, this.columnDropLine)
     this.observer = new ResizeObserver(() => this.scheduleRows()); this.observer.observe(this.dom)
     document.addEventListener('scroll',this.scrolled,true)
+    editor.on('transaction',this.transaction)
     this.update(node)
   }
   update(node: PMNode) {
     if (node.type !== this.node.type) return false
     this.node = node
+    applyTableSize(this.dom,node.attrs,this.editor)
     this.merged = hasMergedCells(node)
     const count = TableMap.get(node).width
     const saved = String(node.attrs.columnSize || '').split(',').map(Number)
@@ -325,13 +347,15 @@ class PagedTableView implements NodeView {
   private scheduleRows() {
     cancelAnimationFrame(this.rowFrame)
     this.rowFrame = requestAnimationFrame(() => {
+      applyTableSize(this.dom,this.node.attrs,this.editor)
       const rows = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr')]
       if (this.hoveredRow >= rows.length) this.hideRowHandle()
       const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
       const first = rows[0]?.getBoundingClientRect()
       if(first) {
         const tableHandle = this.controls.querySelector<HTMLElement>('.table-block-handle')!
-        tableHandle.style.left = `${(first.left - rect.left) / scale - 26}px`; tableHandle.style.top = `${(first.top - rect.top) / scale - 25}px`
+        const canvas=blockViewport(this.editor),visible=rows.map(r=>r.getBoundingClientRect()).find(r=>!canvas||r.bottom>canvas.top+30&&r.top<canvas.bottom)||first
+        tableHandle.style.left = `${(visible.left - rect.left) / scale - 26}px`; tableHandle.style.top = `${(Math.max(visible.top-25*scale,(canvas?.top||0)+4) - rect.top) / scale}px`
         let left = 0
         this.handles.forEach((handle,i)=>{ left += this.widths[i]!; handle.style.left = `${(first.left - rect.left + first.width * left / 100) / scale}px`; handle.style.top = `${(first.top - rect.top) / scale}px`; handle.style.height = `${first.height / scale}px` })
         // Single shared grips follow whichever row and column the pointer is over.
@@ -441,7 +465,7 @@ class PagedTableView implements NodeView {
         clone.className='';clone.removeAttribute('contenteditable');clone.querySelectorAll('[contenteditable]').forEach(el=>el.removeAttribute('contenteditable'))
         clone.querySelectorAll('button,input,textarea,.block-controls,.table-resizers').forEach(el=>el.remove())
         clone.querySelectorAll('[id]').forEach(el=>el.removeAttribute('id'))
-        clone.style.cssText=`box-sizing:border-box;position:relative;vertical-align:top;width:${rect.width}px;min-width:${rect.width}px;height:${rect.height}px;border:1px solid ${css.borderTopColor};background:${css.backgroundColor==='rgba(0, 0, 0, 0)'?getComputedStyle(this.dom.closest('.paper-editor')!).backgroundColor:css.backgroundColor};font-family:${css.fontFamily};font-size:${parseFloat(css.fontSize)*scale}px;line-height:${css.lineHeight==='normal'?'normal':parseFloat(css.lineHeight)*scale+'px'};color:${css.color};text-align:${css.textAlign};white-space:normal;overflow-wrap:anywhere;padding:${['Top','Right','Bottom','Left'].map(side=>parseFloat(css.getPropertyValue('padding-'+side.toLowerCase()))*scale+'px').join(' ')}`
+        clone.style.cssText=`box-sizing:border-box;position:relative;vertical-align:top;width:${rect.width}px;min-width:${rect.width}px;height:${rect.height}px;border:1px solid ${css.borderTopColor};background:${cell.style.backgroundColor||((css.backgroundColor==='rgba(0, 0, 0, 0)')?getComputedStyle(this.dom.closest('.paper-editor')!).backgroundColor:css.backgroundColor)};font-family:${css.fontFamily};font-size:${parseFloat(css.fontSize)*scale}px;line-height:${css.lineHeight==='normal'?'normal':parseFloat(css.lineHeight)*scale+'px'};color:${css.color};text-align:${css.textAlign};white-space:normal;overflow-wrap:anywhere;padding:${['Top','Right','Bottom','Left'].map(side=>parseFloat(css.getPropertyValue('padding-'+side.toLowerCase()))*scale+'px').join(' ')}`
         originals.push(cell);line.append(clone)
       }
       body.append(line)
@@ -710,7 +734,7 @@ class PagedTableView implements NodeView {
     if (mutation.type === 'selection') return false
     return !this.contentDOM.contains(mutation.target)
   }
-  destroy() { document.removeEventListener('scroll',this.scrolled,true);clearTimeout(this.hideTimer);this.cancelDrag?.(); this.clearGhost(); this.observer.disconnect(); this.unwatch(); cancelAnimationFrame(this.rowFrame) }
+  destroy() { this.editor.off('transaction',this.transaction);document.removeEventListener('scroll',this.scrolled,true);clearTimeout(this.hideTimer);this.cancelDrag?.(); this.clearGhost(); this.observer.disconnect(); this.unwatch(); cancelAnimationFrame(this.rowFrame) }
 }
 
 function cellView(tag: 'td' | 'th', node: PMNode): NodeView {
@@ -744,8 +768,8 @@ export function parseTsv(text: string): string[][] | null {
 export function createPagedTable(){let tableSchema:Schema
 return Table.extend({
   onBeforeCreate(){tableSchema=this.editor.schema},
-  renderMarkdown(node,helpers,context){const styled=!!node.attrs?.headerColumn||node.content?.some((row:any,index:number)=>row.content?.some((cell:any)=>colorValue(cell.attrs?.background)||index>0&&cell.type==='tableHeader'));return styled?styledTableHTML(node,tableSchema):this.parent?.(node,helpers,context)||''},
-  addAttributes() { return { ...this.parent?.(),headerColumn:{default:false,parseHTML:el=>el.getAttribute('data-header-column')==='true',renderHTML:attrs=>attrs.headerColumn?{'data-header-column':'true'}:{}}, columnSize: { default: '', parseHTML: element => element.getAttribute('data-column-size') || '', renderHTML: attrs => ({ 'data-column-size': attrs.columnSize }) } } },
+  renderMarkdown(node,helpers,context){const styled=node.attrs?.repeatHeader!==null&&node.attrs?.repeatHeader!==undefined||!!node.attrs?.tableWidth||!!blockAlignStyle(node.attrs?.blockAlign)||!!node.attrs?.headerColumn||node.content?.some((row:any,index:number)=>row.content?.some((cell:any)=>colorValue(cell.attrs?.background)||index>0&&cell.type==='tableHeader'));return styled?styledTableHTML(node,tableSchema):this.parent?.(node,helpers,context)||''},
+  addAttributes() { return { ...this.parent?.(),tableWidth:tableWidthAttribute,tableScale:tableScaleAttribute,blockAlign:blockAlignAttribute,repeatHeader:{default:null,parseHTML:el=>el.hasAttribute('data-repeat-header')?el.getAttribute('data-repeat-header')==='true':null,renderHTML:a=>a.repeatHeader===null?{}:{'data-repeat-header':String(a.repeatHeader)}},headerColumn:{default:false,parseHTML:el=>el.getAttribute('data-header-column')==='true',renderHTML:attrs=>attrs.headerColumn?{'data-header-column':'true'}:{}}, columnSize: { default: '', parseHTML: element => element.getAttribute('data-column-size') || '', renderHTML: attrs => ({ 'data-column-size': attrs.columnSize }) } } },
   addNodeView() { return ({ node, editor, getPos }) => new PagedTableView(node, editor, getPos) },
   addKeyboardShortcuts() {
     const parent = this.parent?.() || {}

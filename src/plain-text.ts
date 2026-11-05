@@ -40,7 +40,7 @@ export function replacePlainSelection(editor:Editor,text:string,from=editor.stat
  cursor+=parts.at(-1)!.content?.[0]?.text?.length||0
  editor.view.dispatch(tr.setSelection(TextSelection.create(tr.doc,cursor)).scrollIntoView());return true
 }
-function selectedText(editor:Editor){const {from,to}=editor.state.selection;let result='';editor.state.doc.forEach((node,pos)=>{const a=Math.max(0,from-pos-1),b=Math.min(node.content.size,to-pos-1);if(b>a)result+=node.textContent.slice(a,b);if(to>pos+node.nodeSize&&from<=pos+node.nodeSize-1)result+=node.attrs.eol||''});return result}
+export function selectedPlainText(editor:Editor){const {from,to}=editor.state.selection;let result='';editor.state.doc.forEach((node,pos)=>{const a=Math.max(0,from-pos-1),b=Math.min(node.content.size,to-pos-1);if(b>a)result+=node.textContent.slice(a,b);if(to>pos+node.nodeSize&&from<=pos+node.nodeSize-1)result+=node.attrs.eol||''});return result}
 declare module '@tiptap/core'{interface Storage{plainTextMode:{enabled:boolean;eol:string}}}
 export const PlainLine=Node.create({name:'plainLine',priority:50,group:'block',content:'text*',marks:'',code:true,defining:true,whitespace:'pre',addAttributes:()=>({eol:{default:'',rendered:false}}),parseHTML:()=>[{tag:'p[data-plain-line]'}],renderHTML:()=>['p',{'data-plain-line':'',class:'plain-line'},0]})
 export const PlainTextMode=Extension.create({
@@ -69,6 +69,6 @@ export const PlainTextMode=Extension.create({
    const text=event.dataTransfer.getData('text/plain'),{from,to}=view.state.selection;let pos=target.pos
    if(moved){if(pos>=from&&pos<=to)return true;const size=view.state.doc.content.size;replacePlainSelection(editor,'');if(pos>to)pos+=view.state.doc.content.size-size}
    return replacePlainSelection(editor,text,pos,pos)
-  },handleDOMEvents:{compositionstart(view){const{from,to}=view.state.selection,start=view.state.doc.resolve(from);if(settings.enabled&&(start.parent.type.name!=='plainLine'||!start.sameParent(view.state.doc.resolve(to))))replacePlainSelection(editor,'');return false},copy(_view,event){if(!settings.enabled)return false;event.preventDefault();event.clipboardData?.setData('text/plain',selectedText(editor));return true},cut(_view,event){if(!settings.enabled)return false;event.preventDefault();event.clipboardData?.setData('text/plain',selectedText(editor));return replacePlainSelection(editor,'')}}}
+  },handleDOMEvents:{compositionstart(view){const{from,to}=view.state.selection,start=view.state.doc.resolve(from);if(settings.enabled&&(start.parent.type.name!=='plainLine'||!start.sameParent(view.state.doc.resolve(to))))replacePlainSelection(editor,'');return false},copy(_view,event){if(!settings.enabled)return false;event.preventDefault();event.clipboardData?.setData('text/plain',selectedPlainText(editor));return true},cut(_view,event){if(!settings.enabled)return false;event.preventDefault();event.clipboardData?.setData('text/plain',selectedPlainText(editor));return replacePlainSelection(editor,'')}}}
  })]}
 })

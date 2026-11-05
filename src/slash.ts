@@ -13,6 +13,7 @@ export const BLOCKS = [
   { id: 'orderedList', label: '有序列表', description: '有顺序的步骤', keys: 'youxu liebiao ordered number list', icon: 'ordered' },
   { id: 'blockquote', label: '引用', description: '突出一段引文', keys: 'yinyong quote', icon: 'quote' },
   { id: 'codeBlock', label: '代码块', description: '等宽字体的代码段落', keys: 'daima code', icon: 'code' },
+  { id: 'mermaid', label: 'Mermaid 图表', description: '用代码绘制流程图与时序图', keys: 'mermaid chart diagram liuchengtu tuxing', icon: 'code' },
   { id: 'table', label: '表格', description: '插入 3 × 3 表格', keys: 'biaoge table', icon: 'table' },
   { id: 'image', label: '图片', description: '从本机选择图片', keys: 'tupian image photo', icon: 'image' },
   { id: 'horizontalRule', label: '分隔线', description: '在段落之间分隔', keys: 'fengexian divider hr line', icon: 'line' },
@@ -26,22 +27,23 @@ export const BLOCKS = [
   { id: 'pageBreak', label: '分页符', description: '从下一张纸继续', keys: 'fenye page break', icon: 'line' },
 ] as const
 export function useSlashMenu(getEditor: () => Editor | undefined, insertImage: () => void) {
-  const state = ref<{ from: number; to: number; query: string; left: number; top: number; inTable: boolean } | null>(null)
+  const state = ref<{ from: number; to: number; query: string; left: number; top: number; inTable: boolean; button: boolean } | null>(null)
   const selected = ref(0)
-  let dismissed = ''
+  let dismissed = '',buttonAt:number|undefined
   const items = computed(() => {
     const query = state.value?.query.toLowerCase() || ''
     return BLOCKS.filter(item => (!state.value?.inTable || ['paragraph','image','inlineMath','footnote'].includes(item.id)) && `${item.label} ${t(item.label)} ${item.keys}`.toLowerCase().includes(query))
   })
-  function close() { if (state.value) dismissed = `${state.value.from}/${state.value.query}`; state.value = null }
-  function reset() { dismissed = ''; state.value = null }
+  function close() { if (state.value) dismissed = `${state.value.from}/${state.value.query}`;buttonAt=undefined;state.value = null }
+  function reset() { dismissed = '';buttonAt=undefined;state.value = null }
+  function openAtSelection(){const ed=getEditor();if(!ed||ed.state.selection.$from.parent.type.name!=='paragraph')return;buttonAt=ed.state.selection.$from.start();dismissed='';refresh()}
   function refresh() {
     const editor = getEditor()
     if (!editor || editor.isDestroyed || !editor.isFocused || editor.view.composing) { state.value = null; return }
     const { empty, $from, from } = editor.state.selection
     if (!empty || $from.parent.type.name !== 'paragraph' || editor.isActive('codeBlock')) { state.value = null; return }
     const text = $from.parent.textBetween(0, $from.parentOffset, '\n', '\ufffc')
-    const match = /^\/([^\s/]{0,24})$/u.exec(text)
+    const button=buttonAt===$from.start(),match=button?/^([^\s/]{0,24})$/u.exec(text):/^\/([^\s/]{0,24})$/u.exec(text)
     if (!match) { reset(); return }
     if (dismissed === `${$from.start()}/${match[1]}`) { state.value = null; return }
     const previous = state.value
@@ -49,14 +51,14 @@ export function useSlashMenu(getEditor: () => Editor | undefined, insertImage: (
     const height = Math.min(370, window.innerHeight - 40)
     const below = window.innerHeight - rect.bottom - 12
     const top = below >= height ? rect.bottom + 7 : Math.max(12, rect.top - height - 8)
-    state.value = { from: $from.start(), to: from, query: match[1], left: Math.max(12, Math.min(rect.left, window.innerWidth - 310)), top, inTable: editor.isActive('table') }
+    state.value = { from: $from.start(), to: from, query: match[1], left: Math.max(12, Math.min(rect.left, window.innerWidth - 310)), top, inTable: editor.isActive('table'),button }
     if (!previous || previous.query !== match[1] || previous.from !== state.value.from) selected.value = 0
   }
   function execute(index = selected.value) {
     const editor = getEditor(), range = state.value, item = items.value[index]
     if (!editor || !range || !item) return
-    if (editor.state.doc.textBetween(range.from, range.to) !== `/${range.query}`) { close(); return }
-    state.value = null; dismissed = ''
+    if (editor.state.doc.textBetween(range.from, range.to) !== `${range.button?'':'/'}${range.query}`) { close(); return }
+    state.value = null; dismissed = '';buttonAt=undefined
     const chain = editor.chain().focus().deleteRange({ from: range.from, to: range.to })
     if (item.id === 'h1' || item.id === 'h2' || item.id === 'h3') chain.setHeading({ level: Number(item.id[1]) as 1 | 2 | 3 }).run()
     else if (item.id === 'paragraph') chain.setParagraph().run()
@@ -64,6 +66,7 @@ export function useSlashMenu(getEditor: () => Editor | undefined, insertImage: (
     else if (item.id === 'orderedList') chain.toggleOrderedList().run()
     else if (item.id === 'blockquote') chain.toggleBlockquote().run()
     else if (item.id === 'codeBlock') chain.toggleCodeBlock().run()
+    else if (item.id === 'mermaid') chain.insertContent([{type:'codeBlock',attrs:{language:'mermaid'},content:[{type:'text',text:'flowchart LR\n  A[开始] --> B[完成]'}]},{type:'paragraph'}]).run()
     else if (item.id === 'table') chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
     else if (item.id === 'horizontalRule') chain.setHorizontalRule().run()
     else if (item.id === 'pageBreak') chain.insertContent([{ type: 'pageBreak' }, { type: 'paragraph' }]).run()
@@ -88,5 +91,5 @@ export function useSlashMenu(getEditor: () => Editor | undefined, insertImage: (
     if (event.key === 'Enter' && items.value.length) { execute(); return true }
     return false
   }
-  return { state, selected, items, refresh, close, reset, execute, keyDown }
+  return { state, selected, items, refresh, close, reset, execute, keyDown, openAtSelection }
 }

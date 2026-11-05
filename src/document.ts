@@ -2,6 +2,7 @@ import DOMPurify from 'dompurify'
 import type { Editor } from '@tiptap/core'
 import { waitForMath } from './blocks'
 import { waitForCodeHighlighting } from './code-highlighting'
+import { waitForMermaid, sanitizeMermaidSvg } from './mermaid'
 
 export const STARTER = `# 把文字，写在纸上
 
@@ -70,7 +71,7 @@ export function safeMarkdown(markdown: string) {
   result=result.replace(/^(?:(?: {4}|\t)[^\r\n]*(?:\r?\n|$))+/gm,keep)
   result=result.replace(/(?<![\\`])(`+)(?!`)([\s\S]*?[^`])?\1(?!`)/g,keep)
   result=result.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'').replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,'')
-  for(let i=code.length-1;i>=0;i--)result=result.replaceAll(prefix+i+'\u0000',code[i]!)
+  for(let i=code.length-1;i>=0;i--)result=result.replaceAll(prefix+i+'\u0000',()=>code[i]!)
   return result
 }
 
@@ -100,9 +101,11 @@ export function getPageSlices(root: HTMLElement): PageSlice[] {
 export async function createPrintHtml(editor: Editor, title: string, print?:PrintSettings) {
   const root = editor.view.dom
   const folded = [...root.querySelectorAll<HTMLDetailsElement>('details:not([open])')]
+  const diagrams=[...root.querySelectorAll('.code-block')]
   folded.forEach(detail => detail.open = true)
+  diagrams.forEach(el=>el.dispatchEvent(new Event('yeran:print-code')))
   try {
-  await Promise.all([waitForMath(),waitForCodeHighlighting()])
+  await Promise.all([waitForMath(),waitForCodeHighlighting(),waitForMermaid()])
   await document.fonts.ready
   // Wait for local images and allow the pagination extension to settle.
   await Promise.all([...root.querySelectorAll('img')].map(img => img.decode().catch(() => {})))
@@ -127,6 +130,7 @@ export async function createPrintHtml(editor: Editor, title: string, print?:Prin
   clone.removeAttribute('contenteditable')
   clone.querySelectorAll('[contenteditable]').forEach(el => el.removeAttribute('contenteditable'))
   clone.querySelectorAll('.ProseMirror-selectednode').forEach(el => el.classList.remove('ProseMirror-selectednode'))
+  clone.querySelectorAll('.yeran-block-selected,.yeran-selection-fragments').forEach(el=>el.classList.remove('yeran-block-selected','yeran-selection-fragments'))
   clone.querySelectorAll('.writing-muted').forEach(el => el.classList.remove('writing-muted'))
   clone.querySelectorAll('.block-drag-source').forEach(el=>el.classList.remove('block-drag-source'))
   clone.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach((heading,index)=>heading.setAttribute('data-pdf-heading-index',String(index)))
@@ -135,7 +139,9 @@ export async function createPrintHtml(editor: Editor, title: string, print?:Prin
   clone.querySelectorAll('.table-resizers').forEach(el => el.remove())
   clone.querySelectorAll('.page-break-label').forEach(el => el.remove())
   clone.querySelectorAll('.find-match').forEach(el => el.classList.remove('find-match', 'current-find-match'))
-  clone.querySelectorAll('.block-controls,.math-input,.toggle-arrow').forEach(el => el.remove())
+  clone.querySelectorAll('.block-controls,.math-input,.toggle-arrow,.mermaid-zoom-controls,.diagram-resize-handles,.code-resize-handles').forEach(el => el.remove())
+  clone.querySelectorAll('.mermaid-block>pre').forEach(el=>el.remove())
+  clone.querySelectorAll('.mermaid-editing').forEach(el=>el.classList.remove('mermaid-editing'))
   clone.querySelectorAll('details').forEach(el => el.open = true)
   if (clone.querySelector('.katex')) {
     const rules = css.match(/@font-face\s*\{[^}]*\}/gi) || []
@@ -162,7 +168,15 @@ export async function createPrintHtml(editor: Editor, title: string, print?:Prin
       })
     } catch { throw new Error('有图片无法读取，请检查图片路径后再导出。') }
   }))
-  const markup = DOMPurify.sanitize(clone.outerHTML, { ADD_ATTR: ['contenteditable'] })
+  // Sanitize chart SVG separately: the normal document sanitizer deliberately
+  // does not allow foreignObject, which would erase Mermaid's HTML labels.
+  const diagramsToRestore=[...clone.querySelectorAll('.mermaid-preview svg[data-yeran-diagram-svg],.mermaid-preview>svg')].map(svg=>{
+    const placeholder=document.createElement('span');placeholder.dataset.yeranDiagram=crypto.randomUUID()
+    const markup=sanitizeMermaidSvg(svg.outerHTML);svg.replaceWith(placeholder)
+    return {placeholder:placeholder.outerHTML,markup}
+  })
+  let markup = DOMPurify.sanitize(clone.outerHTML, { ADD_ATTR: ['contenteditable'] })
+  for(const diagram of diagramsToRestore)markup=markup.replace(diagram.placeholder,()=>diagram.markup)
   // Each PDF page is a vector clipping of the actual editor layout. No second text layout.
   const escape=(value:string)=>value.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]!))
   const field=(value:string,page:number)=>escape(value.slice(0,160).replace(/\{(title|page|pages|date)\}/g,(_all,key:string)=>({title:title.replace(/\.(md|markdown|txt|textpack|tetpack)$/i,''),page:String(page),pages:String(slices.length),date:new Date().toLocaleDateString('sv-SE')}[key]!)))
@@ -195,5 +209,5 @@ export async function createPrintHtml(editor: Editor, title: string, print?:Prin
   @page yeran-portrait{size:A4 portrait;margin:0}
   @page yeran-landscape{size:A4 landscape;margin:0}
   </style></head><body>${pages}</body></html>`
-  } finally { folded.forEach(detail => detail.open = false) }
+  } finally { folded.forEach(detail => detail.open = false);diagrams.forEach(el=>el.dispatchEvent(new Event('yeran:restore-code'))) }
 }

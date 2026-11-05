@@ -1,0 +1,2 @@
+.paper-editor .yeran-line-break-spacer{display:table;width:100%;height:0;line-height:0;pointer-events:none}
+.paper-editor.continuous-doc .yeran-line-break-spacer{display:none}

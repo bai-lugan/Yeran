@@ -101,6 +101,7 @@ export const MixedPagination = Extension.create<MixedOptions>({
           const at = (y: number) => sheets.find(sheet=>y < sheet.bodyBottom - 1) || sheets[sheets.length-1]!
           const rows = root.querySelectorAll<HTMLElement>('.table-plus > tr')
           for (const row of rows) {
+            if(row.closest<HTMLElement>('.paged-table')?.dataset.tableSized!==undefined){row.dataset.mixedSized='';continue}
             const prior = row.previousElementSibling as HTMLElement | null
             let y = prior ? (prior.getBoundingClientRect().bottom - base) / scale : (row.closest('.paged-table')!.getBoundingClientRect().top - base) / scale
             let sheet = at(y), height = row.getBoundingClientRect().height / scale
@@ -111,7 +112,9 @@ export const MixedPagination = Extension.create<MixedOptions>({
           }
           for (const block of root.querySelectorAll<HTMLElement>(':scope > .code-block,:scope > .math-block,:scope > details,:scope > blockquote,:scope > .callout,:scope > .document-toc,:scope > .footnote-definition,.manual-page-break')) {
             const sheet = at((block.getBoundingClientRect().top - base) / scale)
-            block.style.width = `${Math.floor(sheet.width - 2 * margin)}px`; block.style.marginLeft = block.matches('.manual-page-break') ? '0px' : `${sheet.left + margin}px`; block.dataset.mixedSized = ''
+            if(block.classList.contains('mermaid-block'))block.style.setProperty('--yeran-sheet-body-height',`${sheet.bodyBottom-sheet.bodyTop}px`)
+            const available=Math.floor(sheet.width-2*margin),desired=Number(block.dataset.blockWidth)||available,width=Math.min(available,desired)
+            block.style.width = `${width}px`; block.style.marginLeft = block.matches('.manual-page-break') ? '0px' : `${sheet.left+margin+(block.dataset.blockAlign==='center'?(available-width)/2:block.dataset.blockAlign==='right'?available-width:0)}px`; block.dataset.mixedSized = ''
           }
           const last = root.lastElementChild as HTMLElement | null
           let bottom = last ? (last.getBoundingClientRect().bottom - base) / scale : sheets[0]!.bodyTop
