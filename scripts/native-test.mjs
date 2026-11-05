@@ -5,6 +5,8 @@ export async function connectNative(){
   // Native print is a modal Windows window. Stub only that final OS call; the
   // app still builds and loads its actual print snapshot. Never click it in CI.
   const page=await nativePage(browser)
+  // A WebView URL exists before Vue has mounted and registered shortcuts.
+  await page.waitForSelector('#app .paper-editor')
   await page.addInitScript(()=>{if(window!==window.top)window.print=()=>{window.__yeranPrintCalled=true}})
   return browser
 }

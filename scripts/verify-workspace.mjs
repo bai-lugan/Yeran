@@ -16,7 +16,7 @@ try{
 await page.goto((process.env.YERAN_TEST_URL || 'http://127.0.0.1:1420'));await ready()
 await test('slash menu filters in Chinese/English; keyboard inserts and Escape preserves text',async()=>{
   await reset();await page.keyboard.type('/');await page.getByRole('listbox',{name:'可插入的内容块'}).waitFor()
-  assert.equal(await page.getByRole('listbox').getByRole('option').count(),19)
+  assert.equal(await page.getByRole('listbox').getByRole('option').count(),20)
   await page.keyboard.type('h2');await page.waitForFunction(()=>document.querySelectorAll('.slash-items [role=option]').length===1)
   await page.keyboard.press('Enter');await page.keyboard.insertText('斜杠菜单标题');assert.match(await current(),/^## 斜杠菜单标题/)
   await reset();await page.keyboard.insertText('/表');await page.getByRole('listbox').getByRole('option').filter({hasText:'表格'}).click();assert.equal(await page.locator('.paper-editor table').count(),1)
