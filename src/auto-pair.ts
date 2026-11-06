@@ -15,7 +15,8 @@ export const AutoPair=Extension.create({
         if((before.match(/(?<!\\)\$/g)?.length||0)%2===1||text==='^'&&before.endsWith('['))return false
         if(text!=='`'&&!before.startsWith('```')&&(before.match(/(?<!\\)`/g)?.length||0)%2===1)return false
         if(text===' '&&/^\*{1,3}$/.test(before)&&after===before){view.dispatch(state.tr.delete(from,from+after.length));return false}
-        if(text==='`'&&before==='``'&&!after){view.dispatch(state.tr.insertText('`',from,to));return true}
+        if((text==='`'&&/^ {0,3}`{2,}$/.test(before)||text==='~'&&/^ {0,3}~{3,}$/.test(before))&&!after){view.dispatch(state.tr.insertText(text,from,to));return true}
+        if(text==='~'&&/^ {0,3}~~$/.test(before)&&after==='~~'){const tr=state.tr.insertText('~',from,from+after.length);tr.setSelection(TextSelection.create(tr.doc,from+1));view.dispatch(tr);return true}
         if(text===' '&&/^\[[ xX]\]$/.test(before)&&!after&&$from.depth>=2&&$from.node(-1).type.name==='listItem'){view.dispatch(state.tr.delete($from.start(),from));editor.commands.toggleTaskList();if(/[xX]/.test(before))editor.commands.updateAttributes('taskItem',{checked:true});return true}
         const close=pairs[text],selected=from!==to
         if(selected&&marks[text]){const tr=state.tr;for(const name of marks[text]!){const mark=state.schema.marks[name];if(mark)tr.addMark(from,to,mark.create())}view.dispatch(tr);return true}
@@ -45,7 +46,6 @@ export const AutoPair=Extension.create({
       },
       handleKeyDown(view,event){if(!settings.enabled||view.composing||event.ctrlKey||event.metaKey||!view.state.selection.empty)return false
         const {from,$from}=view.state.selection;if($from.parent.type.spec.code||$from.marks().some(m=>m.type.name==='code'))return false;const before=$from.parent.textBetween(0,$from.parentOffset),after=$from.parent.textBetween($from.parentOffset,$from.parent.content.size)
-        const fence=/^```([\w+-]*)$/.exec(before);if(event.key==='Enter'&&fence&&!after&&$from.parent.type.name==='paragraph'){event.preventDefault();const tr=view.state.tr.replaceWith($from.before(),$from.after(),view.state.schema.nodes.codeBlock!.create({language:fence[1]||null}));let caret=$from.start();const end=Math.min(tr.doc.content.size,$from.after()+tr.doc.content.size-view.state.doc.content.size);tr.doc.nodesBetween($from.before(),end,(node,pos)=>{if(node.type.name==='codeBlock'){caret=pos+1;return false}});tr.setSelection(TextSelection.create(tr.doc,caret));view.dispatch(tr);return true}
         if(event.key!=='Backspace')return false
         const closing=before?pairs[before.at(-1)!]:undefined
         if(closing&&closing===after[0]){event.preventDefault();view.dispatch(view.state.tr.delete(from-1,from+1));return true}return false

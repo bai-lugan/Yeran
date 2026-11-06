@@ -27,6 +27,7 @@ export async function pasteEditorClipboard(editor:Editor,plain=false){
  // WebView2 can perform the trusted paste directly, including image files.
  if(!plain){let received=false;const seen=()=>{received=true};editor.view.dom.addEventListener('paste',seen,true);try{document.execCommand('paste')}finally{editor.view.dom.removeEventListener('paste',seen,true)}if(received)return}
  const data=new DataTransfer()
+ if(plain)data.setData('application/x-yeran-plain-text','true')
  try{
   if(plain||!navigator.clipboard.read)data.setData('text/plain',await navigator.clipboard.readText())
   else for(const item of await navigator.clipboard.read())for(const type of item.types){if(type==='text/plain'||type==='text/html')data.setData(type,await(await item.getType(type)).text());else if(type.startsWith('image/'))data.items.add(new File([await item.getType(type)],'clipboard.'+(type.split('/')[1]||'png'),{type}))}

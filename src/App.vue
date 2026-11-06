@@ -8,11 +8,14 @@ import { TextSelection,NodeSelection } from '@tiptap/pm/state'
 import { EditorState } from '@tiptap/pm/state'
 import { FileText, PanelLeft, FolderOpen, FilePlus2, Save, Download, SlidersHorizontal, Bold, Italic, Strikethrough, List, ListOrdered, Quote, Code2, ImagePlus, Table2, Undo2, Redo2, Minus, Plus, Check, X, AlignLeft, Braces, Maximize2, CircleHelp, Printer, Eye, Files, ChevronDown, Pilcrow, Heading1, Heading2, Heading3, Heading4, Heading5, Heading6 } from 'lucide-vue-next'
 import { extensions, getMarkdown as getBodyMarkdown } from './editor'
+import {pasteMarkdown} from './code-fences'
 import { STARTER, DEFAULT_LAYOUT, DEFAULT_PRINT, type PrintSettings, type Layout, safeMarkdown, mm, getPageSlices, createPrintHtml, pageSize } from './document'
 import { native, pickDocuments, saveDocument, chooseSaveTarget, exportPdf, resolveImages, documentStatus, readDocument, type OpenedFile } from './platform'
 import { loadWorkspace, newTab, persistWorkspace, splitFrontmatter, type DocumentTab } from './workspace'
 import { useSlashMenu } from './slash'
 import SlashMenu from './components/SlashMenu.vue'
+import EmojiMenu from './components/EmojiMenu.vue'
+import {useEmojiMenu} from './emoji'
 import TableControls from './components/TableControls.vue'
 import EditorContextMenu from './components/EditorContextMenu.vue'
 import { tableContext as getTableContext, readTableWidths, restoreTableWidths } from './table'
@@ -129,6 +132,7 @@ const error = ref('')
 const recoveryStatus = ref(recovered?.dirty ? '已恢复上次草稿' : '')
 const imageInput = ref<HTMLInputElement>()
 const slash = useSlashMenu(() => editor.value, () => imageInput.value?.click())
+const emoji = useEmojiMenu(() => editor.value)
 const version = ref(0)
 function tabLabel(tab: DocumentTab): string {
   if (tab.path) return tab.path.split(/[\\/]/).pop()!
@@ -229,7 +233,7 @@ async function toggleWriting(mode: 'focus' | 'typewriter') {
   await nextTick()
   editor.value?.view.focus()
 }
-function scheduleStats() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { refreshStats(); slash.refresh() }) }
+function scheduleStats() { cancelAnimationFrame(frame); frame = requestAnimationFrame(() => { refreshStats(); slash.refresh(); emoji.refresh() }) }
 
 function adoptTextMeta(tab:DocumentTab,doc:OpenedFile){
   tab.mode=doc.mode||editingMode(doc.path);tab.textEncoding=textEncoding(doc.textEncoding);tab.textBom=doc.content.startsWith('\uFEFF');tab.textEol=/\r\n|\r|\n/.exec(doc.content)?.[0]||'\n';tab.textNeedsReload=false
@@ -237,8 +241,11 @@ function adoptTextMeta(tab:DocumentTab,doc:OpenedFile){
 function prepareMode(tab:DocumentTab){const ed=editor.value;if(!ed)return;ed.storage.plainTextMode.enabled=tab.mode==='text';ed.storage.plainTextMode.eol=tab.textEol;ed.view.dom.classList.toggle('plain-editor',tab.mode==='text')}
 function setTabContent(tab:DocumentTab,content:string){
   const ed=editor.value!;prepareMode(tab)
-  if(tab.mode==='text')ed.commands.setContent(plainContent(content.replace(/^\uFEFF/,'')),{emitUpdate:false})
-  else ed.commands.setContent(safeMarkdown(splitFrontmatter(content.replace(/^\uFEFF/,'')).body),{contentType:'markdown',emitUpdate:false})
+  // Opening an empty structured document is not a user deletion of the old
+  // selection. Keep Tiptap's clear-document shortcut from flattening its blocks.
+  const chain=ed.chain().command(({tr})=>{tr.setMeta('preventClearDocument',true);return true})
+  if(tab.mode==='text')chain.setContent(plainContent(content.replace(/^\uFEFF/,'')),{emitUpdate:false}).run()
+  else chain.setContent(safeMarkdown(splitFrontmatter(content.replace(/^\uFEFF/,'')).body),{contentType:'markdown',emitUpdate:false}).run()
 }
 async function reloadLegacyText(tab:DocumentTab){
   if(!tab.textNeedsReload||!tab.path||tab.dirty||!native&&!tab.handleKey)return
@@ -246,6 +253,7 @@ async function reloadLegacyText(tab:DocumentTab){
 }
 async function replaceDocument(markdown: string, newPath: string | null, newModified: string | null, isDirty = false, meta?: Pick<OpenedFile,'format'|'bundleKey'|'mode'|'textEncoding'>) {
   if (!editor.value) return
+  emoji.reset()
   autoBlocked.delete(activeId.value)
   adoptTextMeta(currentTab.value,{content:markdown,path:newPath||'',modified:newModified||'',...meta,mode:meta?.mode||(newPath?editingMode(newPath):'markdown')})
   const parts = plain.value?{head:'',body:markdown,pageDirections:{},baseOrientation:undefined}:splitFrontmatter(markdown.replace(/^\uFEFF/,''))
@@ -274,7 +282,7 @@ async function activateTab(id: string, capture = true) {
   if (!tab) return
   await reloadLegacyText(tab)
   const scroll = tab.scrollTop, wasDirty = tab.dirty
-  clearTimeout(draftTimer); slash.reset(); tabMenu.value = null; settings.value = false
+  clearTimeout(draftTimer); slash.reset(); emoji.reset(); tabMenu.value = null; settings.value = false
   activeId.value = id
   prepareMode(tab)
   if(tab.baseOrientation) layout.value.orientation = tab.baseOrientation
@@ -657,7 +665,7 @@ async function applySource() {
   const parts = splitFrontmatter(sourceValue.value)
   frontmatter.value = parts.head
   applyPageMetadata(parts)
-  editor.value.commands.setContent(safeMarkdown(parts.body), { contentType: 'markdown' })
+  editor.value.chain().command(({tr})=>{tr.setMeta('preventClearDocument',true);return true}).setContent(safeMarkdown(parts.body), { contentType: 'markdown' }).run()
   resetMermaidViews(editor.value.view.dom)
   if (path.value) await resolveImages(editor.value, path.value,currentTab.value.bundleKey)
   sourceOpen.value = false; notify('已应用 Markdown 修改')
@@ -716,10 +724,9 @@ onMounted(async () => {
     editorProps: {
       attributes: { class: 'paper-editor', 'aria-label': '文档正文', role: 'textbox', 'aria-multiline': 'true', spellcheck: 'false', style: `font-family:${fontFamily.value};font-size:${layout.value.fontSize}px;line-height:${layout.value.lineHeight}` },
       handlePaste(_view, event) { if(plain.value)return false; const image = [...(event.clipboardData?.files || [])].find(f => f.type.startsWith('image/')); if (image) { void insertImage(image); return true }
-        const text=event.clipboardData?.getData('text/plain')||''
-        if(!event.clipboardData?.getData('text/html')&&!editor.value?.isActive('codeBlock')&&!editor.value?.isActive('table')&&/^(?:#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\[TOC\]|\[\^)/im.test(text)){editor.value?.commands.insertContent(safeMarkdown(text),{contentType:'markdown'});return true}return false },
+        return editor.value?pasteMarkdown(editor.value,event):false },
       handleDrop(_view, event, _slice, moved) { if(plain.value)return false; if (moved) return false; const file = event.dataTransfer?.files[0]; if (file?.type.startsWith('image/')) { void insertImage(file); return true } return false },
-      handleKeyDown: slash.keyDown,
+      handleKeyDown: (view,event)=>emoji.keyDown(view,event)||slash.keyDown(view,event),
 
     },
     onUpdate() { dirty.value = true; scheduleDraft(); scheduleStats() },
@@ -890,6 +897,7 @@ onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('p
     <QuickOpen v-if="quickOpen" :tabs="tabs.map(tab=>({id:tab.id,label:tabLabel(tab),path:tab.path,handleKey:tab.handleKey}))" @close="quickOpen=false; editor?.view.focus()" @open="openLibraryFile" @error="report"/><HistoryPanel v-if="historyDialog" v-bind="historyDialog" @close="historyDialog = null" @restore="restoreVersion" />
     <div v-if="reloadCandidate" class="modal-backdrop history-backdrop"><section class="reload-modal" role="dialog" aria-modal="true" :aria-label="t('重新加载磁盘版本')"><header><h2>{{ t('重新加载磁盘版本') }}</h2><button class="icon-btn" :aria-label="t('取消重新加载')" @click="reloadCandidate = null"><X :size="17" /></button></header><p>{{ t('当前有未保存的修改。重新加载时，会把当前内容保留到另一个标签。') }}</p><div class="reload-comparison"><label>{{ t('当前未保存稿') }}<textarea readonly :value="reloadCandidate.current" :aria-label="t('当前未保存稿')"></textarea></label><label>{{ t('磁盘版本') }}<textarea readonly :value="reloadCandidate.doc.content" :aria-label="t('磁盘版本')"></textarea></label></div><footer><button class="text-btn" @click="reloadCandidate = null">{{ t('取消') }}</button><button class="primary-btn" :disabled="busy" @click="confirmReload">{{ t('保留草稿并重新加载') }}</button></footer></section></div>
     <SlashMenu :menu="slash" />
+    <EmojiMenu :menu="emoji" />
     <div v-if="showHelp || sourceOpen" class="modal-backdrop" @click.self="showHelp = false">
       <section v-if="showHelp" class="help-modal" role="dialog" aria-modal="true" :aria-label="t('使用帮助')"><header><div class="app-mark"><FileText :size="21" /></div><h2>{{ '页然 · Yeran' }}</h2><button class="icon-btn" :aria-label="t('关闭帮助')" @click="showHelp = false"><X :size="18" /></button></header><p><strong>{{ t('所见即所得的 Markdown 分页编辑器') }}</strong><br>{{ t('像 Word 一样排版，像 Typora 一样写作。') }}</p><dl><div><dt>{{ t('新建 / 打开文稿') }}</dt><dd>Ctrl + N / Ctrl + O</dd></div><div><dt>{{ t('快速打开 / 全部保存') }}</dt><dd>Ctrl + Shift + O / Ctrl + Shift + S</dd></div><div><dt>{{ t('保存 / 关闭标签') }}</dt><dd>Ctrl + S / Ctrl + W</dd></div><div><dt>{{ t('查找 / 替换') }}</dt><dd>Ctrl + F / Ctrl + H</dd></div><div><dt>{{ t('打印 / 导出 PDF') }}</dt><dd>Ctrl + P / Ctrl + Shift + E</dd></div><div><dt>{{ t('加粗 / 斜体 / 标红') }}</dt><dd>Ctrl + B / Ctrl + I / Ctrl + E</dd></div><div><dt>{{ t('正文 / 标题 1–6') }}</dt><dd>Ctrl + 0 / Ctrl + 1–6</dd></div><div><dt>{{ t('代码块 / 公式块 / 引用') }}</dt><dd>Ctrl + Shift + K / M / Q</dd></div><div><dt>{{ t('插入表格 / 清除格式') }}</dt><dd>Ctrl + T / Ctrl + \</dd></div><div><dt>{{ t('分页符 / 从磁盘重新加载') }}</dt><dd>Ctrl + Enter / Ctrl + R</dd></div><div><dt>{{ t('专注模式 / 打字机模式') }}</dt><dd>F8 / F9</dd></div></dl><p class="help-note">{{ t('右键标签可另存为、关闭其他或关闭全部。正文保存为 Markdown。恢复草稿保存在本机，不能替代文件备份。图片可粘贴，或从工具栏插入。') }}</p><button class="primary-btn" @click="showHelp = false">{{ t('继续写作') }}</button></section>
       <section v-if="sourceOpen" class="source-modal" role="dialog" aria-modal="true" :aria-label="t('Markdown 源码')"><header><h2><Braces :size="18" />{{ t('Markdown 源码') }}</h2><button class="icon-btn" :aria-label="t('取消源码修改')" @click="sourceOpen = false"><X :size="18" /></button></header><textarea :aria-label="t('Markdown 源码内容')" v-model="sourceValue" spellcheck="false"></textarea><footer><span>{{ t('应用后会重新排版全文。') }}</span><button class="text-btn" @click="sourceOpen = false">{{ t('取消') }}</button><button class="primary-btn" @click="applySource">{{ t('应用修改') }}</button></footer></section>

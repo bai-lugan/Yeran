@@ -1,4 +1,4 @@
-import { Extension, Node, mergeAttributes, InputRule } from '@tiptap/core'
+import { Extension, Node, mergeAttributes, InputRule, textblockTypeInputRule } from '@tiptap/core'
 import { CodeBlock } from '@tiptap/extension-code-block'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
@@ -86,10 +86,11 @@ export const MathBlock = Node.create({
 export const YeranCodeBlock = CodeBlock.extend({
   addAttributes(){return{...this.parent?.(),blockAlign:blockAlignAttribute,codeWidth:{default:null,parseHTML:el=>{const n=Number(el.getAttribute('data-code-width'));return n>=24&&n<=10000?n:null},renderHTML:a=>a.codeWidth?{'data-code-width':a.codeWidth}:{}},codeScale:{default:1,parseHTML:el=>{const n=Number(el.getAttribute('data-code-scale'));return n>=.01&&n<=4?n:1},renderHTML:a=>a.codeScale!==1?{'data-code-scale':a.codeScale}:{}},diagramWidth:{default:null,parseHTML:el=>{const width=Number(el.getAttribute('data-diagram-width'));return width>0&&width<=10000?width:null},renderHTML:attrs=>attrs.diagramWidth?{'data-diagram-width':attrs.diagramWidth}:{}}}},
   parseMarkdown(token,helpers){
-    if(token.raw?.startsWith('```')===false&&token.raw?.startsWith('~~~')===false&&token.codeBlockStyle!=='indented')return[]
+    const fence=/^ {0,3}(`{3,}|~{3,})/.exec(token.raw||'')
+    if(token.raw&&!fence&&token.codeBlockStyle!=='indented')return[]
     let text=String(token.text||''),width:number|null=null,align='left'
     if(String(token.lang||'').toLowerCase()==='mermaid'){for(let i=0;i<2;i++){const m=/^%% yeran:(width=(\d+(?:\.\d+)?)|align=(center|left|right))\r?\n/.exec(text);if(!m)break;if(m[2]){if(Number(m[2])<=0||Number(m[2])>10000)break;width=Number(m[2])}else align=m[3]!;text=text.slice(m[0].length)}}
-    return helpers.createNode('codeBlock',{language:token.lang||null,diagramWidth:width,blockAlign:align},text?[helpers.createTextNode(text)]:[])
+    return helpers.createNode('codeBlock',{language:token.lang||null,fenceMarker:fence?.[1]||'```',diagramWidth:width,blockAlign:align},text?[helpers.createTextNode(text)]:[])
   },
   renderMarkdown(node,helpers){
     const language=node.attrs?.language||'',width=Number(node.attrs?.diagramWidth),text=helpers.renderChildren(node.content||[])
@@ -100,6 +101,7 @@ export const YeranCodeBlock = CodeBlock.extend({
     const fence='`'.repeat(length)
     return`${fence}${language}\n${size}${text}\n${fence}`
   },
+  addInputRules(){return[textblockTypeInputRule({find:/^ {0,3}(`{3,}|~{3,})([A-Za-z0-9_+#.-]*)[ \t\n]$/,type:this.type,getAttributes:match=>({language:match[2]||null,fenceMarker:match[1]})})]},
   addKeyboardShortcuts() { return { ...this.parent?.(), 'Mod-a':()=>{const {$from,$to}=this.editor.state.selection;if($from.parent.type!==this.type||!$from.sameParent($to))return false;return this.editor.commands.setTextSelection({from:$from.start(),to:$from.end()})},Tab: () => this.editor.isActive('codeBlock') && this.editor.commands.insertContent('  ') } },
   addNodeView() {
     return ({ node, editor, getPos }) => {

@@ -22,6 +22,8 @@ import { PlainLine,PlainTextMode } from './plain-text'
 import {blockAlignAttribute,blockAlignStyle} from './block-geometry'
 import {BlockSelections} from './block-selection'
 import {BlockBoundary} from './block-boundary'
+import {CodeFences} from './code-fences'
+import {TableInput} from './table-input'
 
 export const LocalImage = Image.extend({
   addAttributes() { return { ...this.parent?.(),blockAlign:blockAlignAttribute, originalSrc: { default: null, rendered: false },width:{default:null,parseHTML:element=>element.getAttribute('width')||element.style.width||null},height:{default:null,parseHTML:element=>element.getAttribute('height')||element.style.height||null} } },
@@ -57,7 +59,7 @@ const PaginationLayoutSync = Extension.create({
 
 export function extensions(layout: Layout) {
   return [
-    StarterKit.configure({ link: false, heading: false, paragraph: false, codeBlock: false }), BlockBoundary,BlockSelections,YeranLink,PlainLine,PlainTextMode,
+    StarterKit.configure({ link: false, heading: false, paragraph: false, codeBlock: false }), CodeFences,TableInput,BlockBoundary,BlockSelections,YeranLink,PlainLine,PlainTextMode,
     YeranParagraph, YeranHeading,
     YeranCodeBlock, CodeHighlighting, MathBlock, ToggleBlock, ToggleSummary, ToggleContent, ColorHighlight, TextColor, TextAlign.configure({ types: ['paragraph','heading'] }), TaskList, TaskItem.configure({ nested: true }),
     InlineMath, YeranSubscript, YeranSuperscript, FootnoteReference, FootnoteDefinition, TableOfContents, Callout, DocumentLinks, WritingModes, AutoPair, Markdown,
