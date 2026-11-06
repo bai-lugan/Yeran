@@ -1,4 +1,6 @@
-# Notion Markdown 编辑对照 · Yeran 1.0
+# Notion Markdown 编辑对照 · Yeran
+
+2026-11-05 输入规则复核：本地 2.0.2 加入一行表头＋Enter 建表和离线 Emoji 名称补全，并包含代码围栏修复；保留 `>` 引用、`~` 下标及用户自定 Ctrl+E。详细核查见 [Markdown 输入规则](MARKDOWN_INPUT_RULES.md)。
 
 核查日期：2026-10-31。页然保留适合本地文稿的 Notion 式交互：直接编辑、`/` 插入、待办、折叠、提示块和表格行操作。以下区分交互相似与文件兼容，不宣称与 Notion 全功能等同。
 
