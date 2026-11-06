@@ -1,0 +1,18 @@
+{
+  "name": "gemoji",
+  "version": "4.1.0",
+  "license": "MIT",
+  "source": "https://raw.githubusercontent.com/github/gemoji/v4.1.0/db/emoji.json",
+  "sourceSha256": "b174ae2aeb321b52f64adb9ff412f966a7f338839d780784dd15dcad702c2dd6",
+  "licenseSource": "https://raw.githubusercontent.com/github/gemoji/v4.1.0/LICENSE",
+  "generated": "src/emoji-data.json",
+  "generatedSha256": "4b7599adf6b5a1ca466004d2383c9eca881c38c48340dfb755c8bed1112ec696",
+  "entries": 1870,
+  "fields": [
+    "emoji",
+    "aliases",
+    "description",
+    "tags"
+  ],
+  "imagesOrFontsIncluded": false
+}
