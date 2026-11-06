@@ -15,6 +15,8 @@ for (const [directory, record] of Object.entries(lock.packages)) {
     notices.push(`\n${'='.repeat(72)}\n${info.name} ${info.version}\nLicense: ${JSON.stringify(declaredLicense)}\n${licenseText || 'See the upstream package distribution for its complete license.'}`)
   } catch {}
 }
+const emojiSource=JSON.parse(await readFile('third-party/gemoji.json','utf8'))
+notices.push(`\n${'='.repeat(72)}\ngemoji ${emojiSource.version} — vendored emoji names and Unicode data\nLicense: MIT\nSource: ${emojiSource.source}\nOnly text data is included; no emoji images or fonts.\n${await readFile('third-party/gemoji-LICENSE.txt','utf8')}\n`)
 notices.push('\nDesktop runtime: Tauri / Wry / Tao (MIT or Apache-2.0), Rust standard library (MIT or Apache-2.0), and Rust dependencies recorded in src-tauri/Cargo.lock. System Microsoft WebView2 and Edge are separately installed Microsoft products, not bundled here.\n')
 await writeFile('release/THIRD_PARTY_NOTICES.txt', notices.join('\n'), 'utf8')
 console.log('Created release/THIRD_PARTY_NOTICES.txt')
