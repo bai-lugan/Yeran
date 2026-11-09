@@ -1,4 +1,4 @@
-Yeran 2.0.2 — JavaScript dependency notices
+Yeran 2.0.4 — JavaScript dependency notices
 Generated from package-lock.json. Runtime source and license information follows.
 
 
