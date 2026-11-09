@@ -32,8 +32,10 @@ function run(action:string){
 function paint(value:string){paintTableCells(props.editor,value,menu.value?.kind==='row'?'row':menu.value?.kind==='column'?'column':'selection');menu.value=null}
 function outside(event:PointerEvent){if(!(event.target as Element).closest('.table-tools,.table-context-menu'))menu.value=null}
 function escape(event:KeyboardEvent){if(event.key==='Escape')menu.value=null}
-onMounted(()=>{document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape)})
-onBeforeUnmount(()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape)})
+function close(){menu.value=null}
+function scroll(event:Event){if(!panel.value?.contains(event.target as Node))close()}
+onMounted(()=>{document.addEventListener('pointerdown',outside);document.addEventListener('keydown',escape);window.addEventListener('scroll',scroll,true);window.addEventListener('resize',close);window.addEventListener('blur',close)})
+onBeforeUnmount(()=>{document.removeEventListener('pointerdown',outside);document.removeEventListener('keydown',escape);window.removeEventListener('scroll',scroll,true);window.removeEventListener('resize',close);window.removeEventListener('blur',close)})
 defineExpose({openContext,close:()=>menu.value=null})
 </script>
 <template>
