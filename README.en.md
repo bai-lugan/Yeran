@@ -8,22 +8,22 @@
 
 Edit rendered text directly and switch between continuous writing and A4 pages. Lay out like Word. Write like Typora.
 
-## Download 2.0.2
+## Download 2.0.4
 
-Windows x64 · v2.0.2
+Windows x64 · v2.0.4
 
 | Edition | Download | Getting started |
 | --- | --- | --- |
-| Installer (recommended) | [Download Windows installer](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/Yeran_2.0.2_x64-setup.exe) | Install with shortcuts and file open-with registration |
-| Portable | [Download portable ZIP](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/Yeran-2.0.2-portable.zip) | Extract and run `Yeran-2.0.2.exe` |
+| Installer (recommended) | [Download Windows installer](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/Yeran_2.0.4_x64-setup.exe) | Install with shortcuts and file open-with registration |
+| Portable | [Download portable ZIP](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/Yeran-2.0.4-portable.zip) | Extract and run `Yeran-2.0.4.exe` |
 
-[All assets and source](https://github.com/bai-lugan/Yeran/releases/tag/v2.0.2) · [SHA-256 checksums](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/SHA256SUMS-v2.0.2.txt)
+[All assets and source](https://github.com/bai-lugan/Yeran/releases/tag/v2.0.4) · [SHA-256 checksums](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/SHA256SUMS-v2.0.4.txt)
 
 WebView2 Runtime is required; PDF export uses a locally installed Edge or Chrome. Keep the license files included in the portable package.
 
-2.0.2 adds table creation from a single header line and offline emoji-name completion, and fixes code-fence opening, closing and pasting. [Release notes](PATCH_NOTES_2.0.2.md)
+2.0.4 fixes stale table controls while scrolling, cross-page selection, undo boundaries and duplicated equals signs, and includes the IME autosave fix. [Release notes](PATCH_NOTES_2.0.4.md)
 
-## What's in 2.0.2
+## What's in 2.0.4
 
 - **File management:** folder tree, open editors, tabs and cross-file search; create files/folders from context menus and rename files with F2.
 - **Direct writing:** WYSIWYG editing, slash commands, margin-based block selection and grouped dragging, toggles, tasks, text colors and highlights.
@@ -41,7 +41,7 @@ New documents default to Markdown. With images, choose **Markdown + an assets fo
 
 TXT, extensionless files and common scripts/configuration files open as literal text, with continuous/paged editing, Print and PDF export. UTF-8 and BOM-marked UTF-16 are supported. HTML opens as source text.
 
-Windows x64 only. A single cell taller than a whole page still has pagination limitations; check print output for complex tables and HTML. Collaboration, Word/ePub export, auto-update and installer code signing are not included. See the [V2 release notes](PATCH_NOTES_2.0.2.md), [Typora comparison](TYPORA_COMPARISON.md), [Notion editing comparison](NOTION_COMPARISON.md) and [validation record](VALIDATION.md).
+Windows x64 only. A single cell taller than a whole page still has pagination limitations; check print output for complex tables and HTML. Collaboration, Word/ePub export, auto-update and installer code signing are not included. See the [V2 release notes](PATCH_NOTES_2.0.4.md), [Typora comparison](TYPORA_COMPARISON.md), [Notion editing comparison](NOTION_COMPARISON.md) and [validation record](VALIDATION.md).
 
 ## Development and license
 

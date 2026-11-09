@@ -8,22 +8,22 @@
 
 在渲染后的文字中直接编辑，随时切换连续写作与 A4 分页。像 Word 一样排版，像 Typora 一样写作。
 
-## 下载 2.0.2
+## 下载 2.0.4
 
-Windows x64 · v2.0.2
+Windows x64 · v2.0.4
 
 | 版本 | 下载 | 使用方式 |
 | --- | --- | --- |
-| 安装版（推荐） | [下载 Windows 安装包](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/Yeran_2.0.2_x64-setup.exe) | 安装后使用，提供快捷方式与文件打开方式 |
-| 便携版 | [下载便携 ZIP](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/Yeran-2.0.2-portable.zip) | 解压后运行 `Yeran-2.0.2.exe` |
+| 安装版（推荐） | [下载 Windows 安装包](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/Yeran_2.0.4_x64-setup.exe) | 安装后使用，提供快捷方式与文件打开方式 |
+| 便携版 | [下载便携 ZIP](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/Yeran-2.0.4-portable.zip) | 解压后运行 `Yeran-2.0.4.exe` |
 
-[全部附件与源码](https://github.com/bai-lugan/Yeran/releases/tag/v2.0.2) · [SHA-256 校验值](https://github.com/bai-lugan/Yeran/releases/download/v2.0.2/SHA256SUMS-v2.0.2.txt)
+[全部附件与源码](https://github.com/bai-lugan/Yeran/releases/tag/v2.0.4) · [SHA-256 校验值](https://github.com/bai-lugan/Yeran/releases/download/v2.0.4/SHA256SUMS-v2.0.4.txt)
 
 运行需要 WebView2 Runtime；PDF 导出使用本机 Edge 或 Chrome。便携版请保留随包的许可文件。
 
-2.0.2 加入一行表头＋Enter 建表和离线 Emoji 名称补全，并修复代码围栏的创建、结束与粘贴。[本次更新](PATCH_NOTES_2.0.2.md)
+2.0.4 修复滚动时表格按钮残留、跨页点击、撤销边界和等号重复输入，并包含中文输入法自动保存修复。[本次更新](PATCH_NOTES_2.0.4.md)
 
-## 2.0.2 能做什么
+## 2.0.4 能做什么
 
 - **管理文件**：目录树、已打开文件、多标签、跨文件搜索；右键新建文件/文件夹，F2 重命名文件。
 - **直接写作**：所见即所得、`/` 插入菜单、左右外侧框选与成组拖动、折叠块、待办、文字颜色与高亮。
@@ -41,7 +41,7 @@ Windows x64 · v2.0.2
 
 TXT、无后缀文件和常见脚本/配置文件按纯文本编辑，同样支持连续模式、分页、打印和 PDF。支持 UTF-8 与带 BOM 的 UTF-16；HTML 以源码文字打开。
 
-当前面向 Windows x64。单个单元格内容高于整页时仍有排版限制；复杂表格与 HTML 请核对打印结果。尚不包含协作、Word/ePub 导出、自动更新和安装包签名。详见 [V2 更新说明](PATCH_NOTES_2.0.2.md)、[Typora 对照](TYPORA_COMPARISON.md)、[Notion 编辑对照](NOTION_COMPARISON.md)及[验证记录](VALIDATION.md)。
+当前面向 Windows x64。单个单元格内容高于整页时仍有排版限制；复杂表格与 HTML 请核对打印结果。尚不包含协作、Word/ePub 导出、自动更新和安装包签名。详见 [V2 更新说明](PATCH_NOTES_2.0.4.md)、[Typora 对照](TYPORA_COMPARISON.md)、[Notion 编辑对照](NOTION_COMPARISON.md)及[验证记录](VALIDATION.md)。
 
 ## 开发与许可
 

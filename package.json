@@ -1,6 +1,6 @@
 {
   "name": "yeran",
-  "version": "2.0.2",
+  "version": "2.0.4",
   "private": true,
   "type": "module",
   "scripts": {
@@ -36,7 +36,10 @@
     "test:19": "node scripts/verify-19.mjs",
     "test:20": "node scripts/verify-20.mjs",
     "test:21": "node scripts/verify-21.mjs",
-    "test:22": "node scripts/verify-22.mjs"
+    "test:22": "node scripts/verify-22.mjs",
+    "test:23": "node scripts/verify-23.mjs && node scripts/verify-save-guards.mjs",
+    "test:24": "node scripts/verify-24.mjs",
+    "test:25": "node scripts/verify-25.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",
