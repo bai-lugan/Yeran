@@ -1,6 +1,6 @@
 import { Extension } from '@tiptap/core'
 import { Plugin, TextSelection } from '@tiptap/pm/state'
-const pairs:Record<string,string>={'(':')','[':']','{':'}','"':'"',"'":"'",'（':'）','【':'】','《':'》','「':'」','『':'』','“':'”','‘':'’','*':'*','_':'_','~':'~','=':'=','^':'^','`':'`'}
+const pairs:Record<string,string>={'(':')','[':']','{':'}','"':'"',"'":"'",'（':'）','【':'】','《':'》','「':'」','『':'』','“':'”','‘':'’','*':'*','_':'_','~':'~','^':'^','`':'`'}
 const marks:Record<string,string[]>={'*':['italic'],'_':['italic'],'**':['bold'],'__':['bold'],'***':['bold','italic'],'~~':['strike'],'~':['subscript'],'==':['highlight'],'^':['superscript'],'`':['code']}
 declare module '@tiptap/core' { interface Storage { autoPair:{enabled:boolean} } }
 export const AutoPair=Extension.create({
@@ -21,7 +21,7 @@ export const AutoPair=Extension.create({
         const close=pairs[text],selected=from!==to
         if(selected&&marks[text]){const tr=state.tr;for(const name of marks[text]!){const mark=state.schema.marks[name];if(mark)tr.addMark(from,to,mark.create())}view.dispatch(tr);return true}
         if(selected&&close){const tr=state.tr.insertText(close,to).insertText(text,from);tr.setSelection(TextSelection.create(tr.doc,from+1,to+1));view.dispatch(tr);return true}
-        if(!selected&&'_*~='.includes(text)){
+        if(!selected&&'_*~'.includes(text)){
           const run=before.match(new RegExp(`(\\${text}{1,2})$`))?.[1]
           if(run&&after.startsWith(run)&&(!before.slice(0,-run.length)||/[\s([{]$/.test(before.slice(0,-run.length)))){const tr=state.tr.insertText(text+text,from);tr.setSelection(TextSelection.create(tr.doc,from+1));view.dispatch(tr);return true}
         }

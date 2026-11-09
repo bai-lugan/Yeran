@@ -29,7 +29,8 @@ export async function pickBundleFolder(){
   try{const handle=await(window as any).showDirectoryPicker(),key=crypto.randomUUID();browserHandles.set(key,handle);return[await readBundleDocument(handle.name,key)]}catch(e){if((e as Error).name==='AbortError')return[];throw e}
 }
 export async function browserDirectoryStamp(handle:any){const rows:string[]=[];async function scan(dir:any,prefix:string){for await(const[name,entry]of dir.entries()){if(entry.kind==='directory')await scan(entry,prefix+name+'/');else{const file=await entry.getFile();rows.push(`${prefix}${name}:${file.size}:${file.lastModified}`)}}}await scan(handle,'');return rows.sort().join('|')}
-export async function saveBundleDocument(options:{content:string;path:string|null;modified:string|null;saveAs:boolean;handleKey?:string;format:Exclude<DocumentFormat,'markdown'>;resources:BundleResources;reserved:{paths:string[];handles:string[]};explicitTarget?:string;automatic?:boolean}){
+export async function saveBundleDocument(options:{content:string;path:string|null;modified:string|null;saveAs:boolean;handleKey?:string;format:Exclude<DocumentFormat,'markdown'>;resources:BundleResources;reserved:{paths:string[];handles:string[]};explicitTarget?:string;automatic?:boolean;canWrite?:()=>boolean}){
+  const canWrite=()=>!options.canWrite||options.canWrite();if(!canWrite())return null
   let target=options.explicitTarget||options.path,handle=!options.saveAs&&options.handleKey?browserHandles.get(options.handleKey):undefined
   const ext=options.format==='textbundle'?'textbundle':'textpack'
   if(native&&!options.explicitTarget&&(!target||options.saveAs)){target=await save({defaultPath:target||`未命名.${ext}`,filters:[{name:ext,extensions:[ext]}]});if(!target)return null}
@@ -47,10 +48,12 @@ export async function saveBundleDocument(options:{content:string;path:string|nul
   else if(handle){if(options.format==='textbundle'){expected=await browserDirectoryStamp(handle);if(options.modified&&expected!==options.modified)throw new Error('TextBundle 已被其他应用修改。');if(options.resources.bundleKey)await recordHistory(target,(await getBundle(options.resources.bundleKey)).content,'保存前版本')}
     else{const file=await handle.getFile();expected=String(file.lastModified);if(!options.saveAs&&options.modified&&expected!==options.modified)throw new Error('文件已被其他应用修改。');if(file.size)await recordHistory(target,unpackTextPack(new Uint8Array(await file.arrayBuffer())).content,'保存前版本')}}
   let modified=''
+  if(!canWrite())return null
   await storeBundle(data)
+  if(!canWrite())return null
   if(native){const result=options.format==='textbundle'?await invoke<{modified:string}>('write_textbundle',{path:target,files:Object.entries(data.files).map(([name,bytes])=>({name,data:Array.from(bytes)})),expectedModified:expected,failIfMissing:options.automatic||false}):await invoke<{modified:string}>('write_binary_document',{path:target,data:Array.from(packBundle(data)),expectedModified:expected});modified=result.modified}
   else if(handle){if(options.format==='textbundle'){for(const[path,bytes]of Object.entries(data.files)){let dir=handle;const parts=path.split('/');for(const part of parts.slice(0,-1))dir=await dir.getDirectoryHandle(part,{create:true});const file=await dir.getFileHandle(parts.at(-1),{create:true}),stream=await file.createWritable();await stream.write(bytes);await stream.close()}modified=await browserDirectoryStamp(handle)}
-    else{const stream=await handle.createWritable();await stream.write(packBundle(data));await stream.close();modified=String((await handle.getFile()).lastModified)}}
+    else{const stream=await handle.createWritable();if(!canWrite()){await stream.abort();return null}await stream.write(packBundle(data));if(!canWrite()){await stream.abort();return null}await stream.close();modified=String((await handle.getFile()).lastModified)}}
   else{const bytes=packBundle(data),url=URL.createObjectURL(new Blob([bytes.slice().buffer],{type:'application/zip'})),a=document.createElement('a');a.href=url;a.download=target;a.click();setTimeout(()=>URL.revokeObjectURL(url),2000)}
   let historyWarning:string|undefined
   try{await recordHistory(target,data.content,'已保存')}catch(e){historyWarning=String(e)}

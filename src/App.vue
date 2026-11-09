@@ -104,6 +104,35 @@ const dirty = computed({ get: () => currentTab.value.dirty, set: value => curren
 const autoSave=ref(readJson<boolean>('yeran.auto-save.v1')===true)
 const autoBlocked=new Set<string>(),lastEdit=new Map<string,number>()
 let autoTimer:ReturnType<typeof setInterval>|undefined,pointerDown=false
+// IME tracking: ProseMirror's view.composing can briefly read false around Windows IME
+// keystrokes, and an autosave that started just before a composition would otherwise
+// write raw pinyin letters. Treat every key/composition event as an edit and keep our
+// own composition flag so autosave waits until the candidate has been committed.
+let imeComposing=false,imeExplicit=false,imeSettling=false,inputRevision=0
+let compositionTimer:ReturnType<typeof setTimeout>|undefined
+function markTyping(){inputRevision++;lastEdit.set(activeId.value,Date.now())}
+function onCompositionStart(event?:Event){if(event?.type==='compositionstart'||event?.type==='compositionupdate')imeExplicit=true;clearTimeout(compositionTimer);clearTimeout(draftTimer);imeSettling=false;imeComposing=true;markTyping()}
+function onCompositionEnd(){
+  imeComposing=false;imeExplicit=false;imeSettling=true;markTyping();clearTimeout(compositionTimer)
+  // Let the final native input and ProseMirror DOM-observer transaction finish
+  // before taking recovery snapshots. Do not force a DOM flush or move focus.
+  compositionTimer=setTimeout(()=>{imeSettling=false;scheduleDraft()},100)
+}
+function onEditorKey(event:KeyboardEvent){
+  if(event.isComposing||event.keyCode===229||event.key==='Process')onCompositionStart()
+  else markTyping()
+}
+function onEditorInput(event:Event){
+  if((event as InputEvent).isComposing){if(!imeComposing)onCompositionStart();else markTyping()}
+  else {markTyping();if(imeComposing&&!imeExplicit&&!editor.value?.view.composing)onCompositionEnd()}
+}
+function composingNow(){return imeComposing||imeSettling||!!editor.value?.view.composing}
+function removeInputTracking(){
+  clearTimeout(compositionTimer)
+  const dom=editor.value?.view.dom;if(!dom)return
+  dom.removeEventListener('compositionstart',onCompositionStart,true);dom.removeEventListener('compositionupdate',onCompositionStart,true);dom.removeEventListener('compositionend',onCompositionEnd,true);dom.removeEventListener('keydown',onEditorKey,true)
+  dom.removeEventListener('beforeinput',onEditorInput,true);dom.removeEventListener('input',onEditorInput,true);dom.removeEventListener('blur',onCompositionEnd,true)
+}
 const automaticSaving=ref(false)
 const sidebar = ref(true)
 const sidebarPane=ref<'outline'|'files'>(readJson<string>('yeran.sidebar-pane.v1')==='outline'?'outline':'files'),quickOpen=ref(false)
@@ -195,13 +224,14 @@ function captureCurrent() {
 }
 function storeDraft() {
   if (!editor.value) return
+  if(composingNow()){clearTimeout(draftTimer);draftTimer=setTimeout(storeDraft,500);return}
   try {
     captureCurrent()
     persistWorkspace(tabs.value, activeId.value)
     recoveryStatus.value = dirty.value ? '草稿已保护' : path.value ? '已保存' : '未保存到文件'
   } catch { error.value = '恢复草稿保存失败。请立即按 Ctrl+S 保存到文件，避免关闭后丢失内容。' }
 }
-function scheduleDraft() { lastEdit.set(activeId.value,Date.now()); clearTimeout(draftTimer); recoveryStatus.value = '正在保护草稿…'; draftTimer = setTimeout(storeDraft, 500) }
+function scheduleDraft() { markTyping();clearTimeout(draftTimer);recoveryStatus.value = '正在保护草稿…';if(!composingNow())draftTimer = setTimeout(storeDraft, 500) }
 function refreshStats() {
   if (!editor.value) return
   const ed = editor.value
@@ -402,7 +432,8 @@ async function exportTextBundle(format:'textpack'|'textbundle') {
   const ed=editor.value;if(!ed||busy.value)return;fileMenu.value=false;busy.value=true
   try{const result=await saveBundleDocument({content:getMarkdown(ed),path:null,modified:null,saveAs:true,format,resources:bundleResources(currentTab.value),reserved:{paths:tabs.value.flatMap(tab=>tab.path?[tab.path]:[]),handles:tabs.value.flatMap(tab=>tab.handleKey?[tab.handleKey]:[])}});if(result)notify('已导出 TextBundle / TextPack')}catch(e){report(e)}finally{busy.value=false}
 }
-async function saveOne(tab: DocumentTab, saveAs = false, automatic = false) {
+async function saveOne(tab: DocumentTab, saveAs = false, automatic = false,canWrite?:()=>boolean) {
+    if(automatic&&canWrite&&!canWrite())return false
     const content = tab.id === activeId.value && editor.value ? getMarkdown(editor.value) : tab.markdown
     const others = tabs.value.filter(other => other.id !== tab.id)
     // The first save and Save As both open one dialog whose "save as type" list holds
@@ -415,13 +446,13 @@ async function saveOne(tab: DocumentTab, saveAs = false, automatic = false) {
       if(tab.mode==='text'&&choice.format!=='markdown')throw Error('纯文本请保存为文本文件。')
       format = choice.format; target = choice.path
     }
-    const result = await saveDocument(content, tab.path, tab.modified, saveAs, tab.handleKey, { paths: others.flatMap(other => other.path ? [other.path] : []), handles: others.flatMap(other => other.handleKey ? [other.handleKey] : []) }, {format,resources,automatic,mode:tab.mode,textEncoding:tab.textEncoding}, target)
+    const result = await saveDocument(content, tab.path, tab.modified, saveAs, tab.handleKey, { paths: others.flatMap(other => other.path ? [other.path] : []), handles: others.flatMap(other => other.handleKey ? [other.handleKey] : []) }, {format,resources,automatic,mode:tab.mode,textEncoding:tab.textEncoding,canWrite}, target)
     if (result) {
       const oldMode=tab.mode
       tab.path = result.path; tab.modified = result.modified; tab.handleKey = result.handleKey; tab.baseline = result.writtenContent ?? content
       rememberFile(result.path,result.handleKey)
       tab.format=result.format||'markdown';tab.bundleKey=tab.format==='markdown'?undefined:result.bundleKey||tab.bundleKey
-      if(tab.mode!=='text'&&result.rewrites&&Object.keys(result.rewrites).length)rewriteSavedImages(tab,result.rewrites)
+      if(tab.mode!=='text'&&result.rewrites&&Object.keys(result.rewrites).length&&!(tab.id===activeId.value&&composingNow()))rewriteSavedImages(tab,result.rewrites)
       const nextMode:EditingMode=tab.format!=='markdown'?'markdown':editingMode(tab.path)
       if(nextMode!==oldMode){
         const current=tab.id===activeId.value&&editor.value?getMarkdown(editor.value):tab.markdown
@@ -440,24 +471,28 @@ async function saveOne(tab: DocumentTab, saveAs = false, automatic = false) {
 }
 async function runAutoSave(){
   const ed=editor.value
-  if(!autoSave.value||!ed||busy.value||pointerDown||ed.view.composing||sourceOpen.value||showHelp.value||closeDialog.value||historyDialog.value||reloadCandidate.value)return
+  if(!autoSave.value||!ed||busy.value||pointerDown||composingNow()||sourceOpen.value||showHelp.value||closeDialog.value||historyDialog.value||reloadCandidate.value)return
   captureCurrent()
   const tab=tabs.value.find(tab=>tab.path&&tab.dirty&&!tab.diskChanged&&!tab.diskMissing&&!autoBlocked.has(tab.id)&&Date.now()-(lastEdit.get(tab.id)||0)>=2000&&(native||!!tab.handleKey&&browserHandles.has(tab.handleKey)))
   if(!tab)return
-  const handle=tab.handleKey?browserHandles.get(tab.handleKey):undefined
+  const handle=tab.handleKey?browserHandles.get(tab.handleKey):undefined,revision=inputRevision,editStamp=lastEdit.get(tab.id)
+  const canWrite=()=>autoSave.value&&!ed.isDestroyed&&tabs.value.includes(tab)&&!pointerDown&&!composingNow()&&inputRevision===revision&&lastEdit.get(tab.id)===editStamp
   busy.value=true;saving.value=true;automaticSaving.value=true
   try{
     if(!native&&handle?.queryPermission&&await handle.queryPermission({mode:'readwrite'})!=='granted'){autoBlocked.add(tab.id);report(new Error('自动保存需要写入权限，请先手动保存一次。'));return}
     const status=await documentStatus(tab.path!,tab.handleKey)
     if(!status||status.missing||status.modified!==tab.modified){tab.diskMissing=!!status?.missing;tab.diskChanged=!status?.missing;autoBlocked.add(tab.id);return}
-    if(await saveOne(tab,false,true)){if(tab.id===activeId.value&&!tab.dirty)recoveryStatus.value='已自动保存'}
+    // The user may have resumed typing (or started an IME composition) while the disk
+    // check was pending; skip this round so half-composed text is never written.
+    if(!canWrite())return
+    if(await saveOne(tab,false,true,canWrite)){if(tab.id===activeId.value&&!tab.dirty&&!composingNow())recoveryStatus.value='已自动保存'}
   }catch(e){autoBlocked.add(tab.id);report(new Error(t('自动保存已暂停，修改仍保留。请手动保存或重新加载。')+' '+String(e)))}
   finally{busy.value=false;saving.value=false;automaticSaving.value=false}
 }
 function releasePointer(){pointerDown=false}
 function historyKey(tab = currentTab.value) { return tab.path || `draft:${tab.id}` }
 async function checkpoint(reason = '自动编辑快照', force = false) {
-  if (!editor.value || recordingHistory || busy.value) return
+  if (!editor.value || recordingHistory || busy.value || composingNow()) return
   captureCurrent(); const tab = currentTab.value, key = historyKey(tab)
   if (!force && (!tab.dirty || Date.now() - (lastHistory.get(key) || 0) < 60000)) return
   recordingHistory = true
@@ -734,6 +769,9 @@ onMounted(async () => {
   })
   prepareMode(recovered)
   editor.value.storage.documentLinks.open = href=>void openLinkedDocument(href)
+  const editorDom=editor.value.view.dom
+  editorDom.addEventListener('compositionstart',onCompositionStart,true);editorDom.addEventListener('compositionupdate',onCompositionStart,true);editorDom.addEventListener('compositionend',onCompositionEnd,true);editorDom.addEventListener('keydown',onEditorKey,true)
+  editorDom.addEventListener('beforeinput',onEditorInput,true);editorDom.addEventListener('input',onEditorInput,true);editorDom.addEventListener('blur',onCompositionEnd,true)
   editor.value.commands.setWritingModes(writing.value)
   editor.value.storage.autoPair.enabled=autoPair.value
   restoreTableWidths(editor.value, recovered.tableWidths)
@@ -801,7 +839,7 @@ watch(sidebarPane,value=>{try{localStorage.setItem('yeran.sidebar-pane.v1',JSON.
 watch(autoSave,value=>{autoBlocked.clear();try{localStorage.setItem('yeran.auto-save.v1',JSON.stringify(value))}catch{report(new Error('写作模式无法保存到本机。'))}})
 watch(printSettings,value=>{try{localStorage.setItem('yeran.print-settings.v1',JSON.stringify(value))}catch{report(new Error('页面设置无法保存到本机。'))}},{deep:true})
 watch(title, name => document.title = `${name} — 页然 · Yeran`)
-onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('pointerup',releasePointer);document.removeEventListener('pointercancel',releasePointer);window.removeEventListener('blur',releasePointer);removeOpenListener?.(); disposePrintFrame(); releaseBundleURLs(); clearInterval(diskTimer); clearInterval(historyTimer); document.removeEventListener('visibilitychange', appFocus); window.removeEventListener('focus', appFocus); clearTimeout(draftTimer); storeDraft(); observer?.disconnect(); removeCloseListener?.(); cancelAnimationFrame(frame); editor.value?.destroy(); window.removeEventListener('keydown', handleKey,true); window.removeEventListener('resize', adaptSidebar); window.removeEventListener('beforeunload', beforeUnload); document.removeEventListener('visibilitychange', storeDraft); document.removeEventListener('pointerdown', outsideClick); window.removeEventListener('scroll', slash.refresh, true) })
+onBeforeUnmount(() => { clearInterval(autoTimer);document.removeEventListener('pointerup',releasePointer);document.removeEventListener('pointercancel',releasePointer);window.removeEventListener('blur',releasePointer);removeOpenListener?.(); disposePrintFrame(); releaseBundleURLs(); clearInterval(diskTimer); clearInterval(historyTimer); document.removeEventListener('visibilitychange', appFocus); window.removeEventListener('focus', appFocus); clearTimeout(draftTimer); storeDraft(); removeInputTracking();observer?.disconnect(); removeCloseListener?.(); cancelAnimationFrame(frame); editor.value?.destroy(); window.removeEventListener('keydown', handleKey,true); window.removeEventListener('resize', adaptSidebar); window.removeEventListener('beforeunload', beforeUnload); document.removeEventListener('visibilitychange', storeDraft); document.removeEventListener('pointerdown', outsideClick); window.removeEventListener('scroll', slash.refresh, true) })
 </script>
 
 <template>

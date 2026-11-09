@@ -47,8 +47,10 @@ export async function chooseSaveTarget(suggested: string | null, hasImages=false
   if (!path) return null
   return { path, format: documentFormat(path) }
 }
-export async function saveDocument(content: string, path: string | null, modified: string | null, saveAs = false, handleKey?: string, reserved: { paths: string[]; handles: string[] } = { paths: [], handles: [] },packageOptions?:{format:DocumentFormat;resources:BundleResources;automatic?:boolean;mode?:EditingMode;textEncoding?:TextEncoding},explicitTarget?:string): Promise<{ path: string; modified: string; handleKey?: string; historyWarning?: string;format?:DocumentFormat;bundleKey?:string;writtenContent?:string;rewrites?:Record<string,string> } | null> {
-  if(packageOptions&&packageOptions.format!=='markdown')return saveBundleDocument({content,path,modified,saveAs,handleKey,reserved,format:packageOptions.format,resources:packageOptions.resources,automatic:packageOptions.automatic,explicitTarget})
+export async function saveDocument(content: string, path: string | null, modified: string | null, saveAs = false, handleKey?: string, reserved: { paths: string[]; handles: string[] } = { paths: [], handles: [] },packageOptions?:{format:DocumentFormat;resources:BundleResources;automatic?:boolean;mode?:EditingMode;textEncoding?:TextEncoding;canWrite?:()=>boolean},explicitTarget?:string): Promise<{ path: string; modified: string; handleKey?: string; historyWarning?: string;format?:DocumentFormat;bundleKey?:string;writtenContent?:string;rewrites?:Record<string,string> } | null> {
+  const canWrite=()=>!packageOptions?.canWrite||packageOptions.canWrite()
+  if(!canWrite())return null
+  if(packageOptions&&packageOptions.format!=='markdown')return saveBundleDocument({content,path,modified,saveAs,handleKey,reserved,format:packageOptions.format,resources:packageOptions.resources,automatic:packageOptions.automatic,explicitTarget,canWrite:packageOptions.canWrite})
   if (native) {
     let target = explicitTarget || path
     if (!explicitTarget && (!target || saveAs)) target = await save({ defaultPath: path || (packageOptions?.mode==='text'?'未命名.txt':'未命名.md'), filters: packageOptions?.mode==='text'?undefined:[{ name: 'Markdown', extensions: ['md'] }] })
@@ -56,6 +58,7 @@ export async function saveDocument(content: string, path: string | null, modifie
     const normalized = target.replace(/\\/g, '/').toLowerCase()
     if (reserved.paths.some(other => other.replace(/\\/g, '/').toLowerCase() === normalized)) throw new Error('目标文件已在其他标签页打开，请切换到该标签保存，或选择不同的文件名。')
     const prepared=packageOptions&&packageOptions.mode!=='text'?await prepareMarkdown(packageOptions.resources,target,path):{content,rewrites:{}}
+    if(!canWrite())return null
     const result=await invoke<{path:string;modified:string;historyWarning?:string}>('write_document', { path: target, content:prepared.content, failIfMissing:packageOptions?.automatic||false, textEncoding:packageOptions?.textEncoding||'utf8',expectedModified: normalized === path?.replace(/\\/g,'/').toLowerCase() ? modified : null })
     return {...result,format:'markdown',bundleKey:undefined,writtenContent:prepared.content,rewrites:prepared.rewrites}
   }
@@ -67,7 +70,12 @@ export async function saveDocument(content: string, path: string | null, modifie
       const file: File = await handle.getFile()
       if (!saveAs && existingHandle && modified && String(file.lastModified) !== modified) throw new Error('文件已被其他应用修改。请另存为，避免覆盖新的内容。')
       await recordHistory(handle.name, (await readTextFile(file)).content, '保存前版本')
-      const stream = await handle.createWritable(); await stream.write(packageOptions?.mode==='text'||packageOptions?.textEncoding&&packageOptions.textEncoding!=='utf8'?encodeText(content,packageOptions.textEncoding):content); await stream.close()
+      if(!canWrite())return null
+      const stream = await handle.createWritable()
+      if(!canWrite()){await stream.abort();return null}
+      await stream.write(packageOptions?.mode==='text'||packageOptions?.textEncoding&&packageOptions.textEncoding!=='utf8'?encodeText(content,packageOptions.textEncoding):content)
+      if(!canWrite()){await stream.abort();return null}
+      await stream.close()
       const key = saveAs || !handleKey ? crypto.randomUUID() : handleKey
       browserHandles.set(key, handle)
       let historyWarning: string | undefined
@@ -76,6 +84,7 @@ export async function saveDocument(content: string, path: string | null, modifie
     } catch (e) { if ((e as Error).name === 'AbortError') return null; throw e }
   }
   const filename=path?.split(/[\\/]/).pop() || (packageOptions?.mode==='text'?'未命名.txt':'未命名.md')
+  if(!canWrite())return null
   download(encodeText(content,packageOptions?.textEncoding),filename,packageOptions?.mode==='text'?'text/plain':'text/markdown')
   return { path: path || filename, modified: '' }
 }

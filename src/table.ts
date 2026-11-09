@@ -11,7 +11,7 @@ import { colorValue } from './colors'
 import {blockAlignAttribute,blockAlignStyle} from './block-geometry'
 import {applyTableSize,tableWidthAttribute,tableScaleAttribute} from './table-sizing'
 import {BlockSelection} from './block-selection'
-import {blockViewport} from './block-fragments'
+import {blockFragments,blockViewport} from './block-fragments'
 
 const TABLE_GRIP_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="4" r="1.2"/><circle cx="11" cy="4" r="1.2"/><circle cx="5" cy="8" r="1.2"/><circle cx="11" cy="8" r="1.2"/><circle cx="5" cy="12" r="1.2"/><circle cx="11" cy="12" r="1.2"/></svg>'
 
@@ -109,7 +109,10 @@ export function tableAction(editor:Editor,action:'appendRow'|'appendColumn'|'dup
   const column=action==='appendColumn'?nextMap.width-1:action==='duplicateColumn'?at+1:Math.min((context?.column||1)-1,nextMap.width-1)
   const tr=closeHistory(editor.state.tr).replaceWith(pos,pos+table.nodeSize,replacement)
   const cell=pos+1+nextMap.map[row*nextMap.width+column]!
-  editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(cell+1))).scrollIntoView());editor.view.focus();return true
+  editor.view.dispatch(tr.setSelection(TextSelection.near(tr.doc.resolve(cell+1))).scrollIntoView())
+  // A structural table action must not absorb the next cell edit into its undo
+  // group, even when the user starts typing or deleting immediately afterward.
+  editor.view.dispatch(closeHistory(editor.state.tr));editor.view.focus();return true
 }
 export function headerColumnEnabled(table:PMNode){return !!table.attrs.headerColumn||table.childCount>1&&Array.from({length:table.childCount-1},(_,i)=>table.child(i+1).firstChild?.type.name==='tableHeader').every(Boolean)}
 export function toggleFirstHeaderColumn(editor:Editor){
@@ -235,9 +238,11 @@ class PagedTableView implements NodeView {
   private rowHandle?: HTMLButtonElement
   private columnHandle?: HTMLButtonElement
   private hoveredRow = -1
+  private tableHandleRow = 0
   private hoveredColumn = -1
   private merged = false
   private rowFrame = 0
+  private layoutPending = false
   private hideTimer?: ReturnType<typeof setTimeout>
   private observer: ResizeObserver
   private rowDrag?: { from: number; table: PMNode; insertAt: number; moved: boolean }
@@ -249,10 +254,15 @@ class PagedTableView implements NodeView {
   private hoveredCell?: HTMLElement
   private addRow=document.createElement('button')
   private addColumn=document.createElement('button')
+  private tableHandle=document.createElement('button')
   private dropLine = document.createElement('div')
   private columnDropLine = document.createElement('div')
   private unwatch: () => void
-  private scrolled=(event:Event)=>{if((event.target as HTMLElement)?.contains?.(this.dom))this.scheduleRows()}
+  private scrolled=(event:Event)=>{
+    if(!(event.target as HTMLElement)?.contains?.(this.dom))return
+    if(!this.rowDrag&&!this.columnDrag)this.hideControls()
+    this.scheduleRows(false)
+  }
   private transaction=({transaction}:{transaction:import('@tiptap/pm/state').Transaction})=>{if(transaction.getMeta('yeranLayout'))this.scheduleRows()}
   constructor(private node: PMNode, private editor: Editor, private getPos: () => number | undefined) {
     this.dom.className = 'paged-table'
@@ -260,12 +270,13 @@ class PagedTableView implements NodeView {
     this.controls.className = 'table-resizers'
     this.controls.contentEditable = 'false'
     this.dom.append(this.contentDOM, this.controls)
-    const tableHandle = document.createElement('button')
+    const tableHandle = this.tableHandle
+    tableHandle.hidden = true
     tableHandle.className = 'table-block-handle'; tableHandle.innerHTML = '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="16" height="16" rx="2"/><path d="M2 8h16M8 2v16"/></svg>'; tableHandle.type = 'button'
     const labels = () => { tableHandle.title = t('点击选中整表；拖动移动选中块；Delete / Backspace 删除'); tableHandle.setAttribute('aria-label', t('选择整个表格')); this.handles.forEach((handle,i) => handle.setAttribute('aria-label', t(`调整第 ${i+1} 列宽`))); this.labelRow(); this.labelColumn(); this.addRow.setAttribute('aria-label',t('在表格末尾添加行')); this.addColumn.setAttribute('aria-label',t('在表格末尾添加列')) }
     labels(); this.unwatch = watch(locale, labels)
-    tableHandle.addEventListener('pointerdown', event => { event.preventDefault(); const pos = this.getPos(); if (typeof pos === 'number') {const selection=editor.state.selection;if(!(selection instanceof BlockSelection&&selection.blocks.some(r=>r.from===pos)))selectTable(editor,pos);tableHandle.dispatchEvent(new CustomEvent('yeran:block-drag',{bubbles:true,detail:{pos,pointer:event}}))} })
-    tableHandle.addEventListener('click',event=>{if(event.detail===0)selectTable(editor,this.getPos())})
+    tableHandle.addEventListener('pointerdown', event => { event.preventDefault(); const pos = this.getPos(); if (typeof pos === 'number') {const selection=editor.state.selection;if(!(selection instanceof BlockSelection&&selection.blocks.some(r=>r.from===pos)))selectTable(editor,pos);this.hideGrips();tableHandle.dispatchEvent(new CustomEvent('yeran:block-drag',{bubbles:true,detail:{pos,pointer:event}}))} })
+    tableHandle.addEventListener('click',event=>{if(event.detail===0){selectTable(editor,this.getPos());this.hideGrips()}})
     // One shared row grip follows the hovered row, mirroring the single column grip.
     const rowHandle = document.createElement('button')
     rowHandle.type = 'button'; rowHandle.className = 'table-axis-handle table-row-handle'
@@ -304,7 +315,7 @@ class PagedTableView implements NodeView {
     // Leaving the table must not hide/move the button while approaching it.
     this.dom.addEventListener('mouseleave', () => {
       clearTimeout(this.hideTimer)
-      this.hideTimer=setTimeout(()=>{if(!this.columnDrag&&!this.rowDrag){this.dom.classList.remove('table-controls-visible');this.hideGrips()}},220)
+      this.hideTimer=setTimeout(()=>{if(!this.columnDrag&&!this.rowDrag)this.hideControls()},220)
     })
     this.dropLine.className = 'table-row-drop-line'; this.dropLine.hidden = true
     this.columnDropLine.className = 'table-column-drop-line'; this.columnDropLine.hidden = true
@@ -344,25 +355,24 @@ class PagedTableView implements NodeView {
     this.scheduleRows()
     return true
   }
-  private scheduleRows() {
+  private scheduleRows(layout = true) {
+    this.layoutPending ||= layout
     cancelAnimationFrame(this.rowFrame)
     this.rowFrame = requestAnimationFrame(() => {
-      applyTableSize(this.dom,this.node.attrs,this.editor)
+      if(this.layoutPending){this.layoutPending=false;applyTableSize(this.dom,this.node.attrs,this.editor)}
       const rows = [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr')]
       if (this.hoveredRow >= rows.length) this.hideRowHandle()
       const rect = this.controls.getBoundingClientRect(), scale = rect.width / this.controls.offsetWidth || 1
       const first = rows[0]?.getBoundingClientRect()
       if(first) {
-        const tableHandle = this.controls.querySelector<HTMLElement>('.table-block-handle')!
-        const canvas=blockViewport(this.editor),visible=rows.map(r=>r.getBoundingClientRect()).find(r=>!canvas||r.bottom>canvas.top+30&&r.top<canvas.bottom)||first
-        tableHandle.style.left = `${(visible.left - rect.left) / scale - 26}px`; tableHandle.style.top = `${(Math.max(visible.top-25*scale,(canvas?.top||0)+4) - rect.top) / scale}px`
+        this.positionTableHandle(rows,rect,scale)
         let left = 0
         this.handles.forEach((handle,i)=>{ left += this.widths[i]!; handle.style.left = `${(first.left - rect.left + first.width * left / 100) / scale}px`; handle.style.top = `${(first.top - rect.top) / scale}px`; handle.style.height = `${first.height / scale}px` })
         // Single shared grips follow whichever row and column the pointer is over.
         this.positionColumnHandle(this.cells_(rows[0]), rect, scale)
         this.positionRowHandle(rows, rect, scale)
         this.positionAddButtons(rows,rect,scale)
-      }
+      }else this.tableHandle.hidden=true
     })
   }
   // Pointer-driven row drag, for the same reason as columns: preventing mousedown
@@ -492,10 +502,31 @@ class PagedTableView implements NodeView {
     if (this.rowHandle) this.rowHandle.hidden = true
   }
   private hideGrips() { this.hideRowHandle(); this.hideColumnHandle(); this.hoveredCell?.classList.remove('table-cell-hovered'); this.hoveredCell=undefined;this.clearAxisPreview() }
+  private hideControls(){clearTimeout(this.hideTimer);this.dom.classList.remove('table-controls-visible');this.hideGrips()}
   private showControls(){clearTimeout(this.hideTimer);this.dom.classList.add('table-controls-visible')}
   private rows_() { return [...this.contentDOM.querySelectorAll<HTMLElement>(':scope > tr')] }
   // Repeated print headers are decoration widgets, never document cells.
   private cells_(row?:HTMLElement){return row?[...row.querySelectorAll<HTMLElement>(':scope > :is(th,td):not(.repeat-header-widget)')]:[]}
+  private positionTableHandle(rows:HTMLElement[],rect:DOMRect,scale:number){
+    const viewport=blockViewport(this.editor),height=24*scale
+    // Never fall back to an offscreen row: clamping such a row to the viewport
+    // stacks every earlier table's selector over the text currently being read.
+    const fragments=blockFragments(this.editor,this.dom).filter(part=>{
+      if(!part.width||!part.height)return false
+      const top=Math.max(part.top,(viewport?.top||0)+4)
+      return !viewport||part.right>viewport.left&&part.left<viewport.right&&top+height<=Math.min(part.bottom,viewport.bottom)
+    })
+    // If two sheets are visible, use the sheet containing the hovered row. A
+    // selector on a previous sheet would require crossing unrelated paragraphs.
+    const anchor=rows[this.tableHandleRow]?.getBoundingClientRect()
+    const visible=fragments.find(part=>anchor&&anchor.top<part.bottom&&anchor.bottom>part.top)||fragments[0]
+    this.tableHandle.hidden=!visible
+    if(!visible){if(!this.rowDrag&&!this.columnDrag)this.hideControls();return}
+    // Keep the selector in the text body's gutter, clear of both page furniture
+    // above the fragment and the row grip straddling the table border.
+    this.tableHandle.style.left=`${(visible.left-rect.left)/scale-42}px`
+    this.tableHandle.style.top=`${(Math.max(visible.top,(viewport?.top||0)+4)-rect.top)/scale}px`
+  }
   private positionAddButtons(rows:HTMLElement[],rect:DOMRect,scale:number){const last=rows.at(-1)?.getBoundingClientRect(),side=rows[Math.max(0,this.hoveredRow)]?.getBoundingClientRect();if(last){this.addRow.style.left=`${(last.left+last.width/2-rect.left)/scale-12}px`;this.addRow.style.top=`${(last.bottom-rect.top)/scale+2}px`}if(side){this.addColumn.style.left=`${(side.right-rect.left)/scale+3}px`;this.addColumn.style.top=`${(side.top+side.height/2-rect.top)/scale-12}px`}}
   // The row grip straddles the table's left border, centred on the hovered row.
   private positionRowHandle(rows: HTMLElement[], rect: DOMRect, scale: number) {
@@ -508,6 +539,7 @@ class PagedTableView implements NodeView {
   }
   private trackPointer(event: MouseEvent) {
     if (this.columnDrag || this.rowDrag) return
+    this.showControls()
     const target=event.target as HTMLElement, cell=target.closest<HTMLElement>('td,th')
     if(cell&&this.contentDOM.contains(cell)){
       if(cell===this.hoveredCell&&!this.rowHandle?.hidden&&!this.columnHandle?.hidden){this.scheduleRows();return}
@@ -515,8 +547,9 @@ class PagedTableView implements NodeView {
       if(index<0)return
       if(cell.classList.contains('repeat-header-widget'))return
       const cells=this.cells_(row),column=cells.slice(0,cells.indexOf(cell)).reduce((n,el)=>n+((el as HTMLTableCellElement).colSpan||1),0)
-      this.hoveredRow=index;this.hoveredColumn=column;this.rowHandle!.hidden=false;this.columnHandle!.hidden=false;this.labelRow();this.labelColumn()
+      this.hoveredRow=index;this.tableHandleRow=index;this.hoveredColumn=column;this.rowHandle!.hidden=false;this.columnHandle!.hidden=false;this.labelRow();this.labelColumn()
       const rect=this.controls.getBoundingClientRect(),scale=rect.width/this.controls.offsetWidth||1
+      this.positionTableHandle(rows,rect,scale)
       this.positionRowHandle(rows,rect,scale);this.positionColumnHandle(this.cells_(rows[0]),rect,scale)
       this.positionAddButtons(rows,rect,scale)
       if(this.hoveredCell!==cell){this.hoveredCell?.classList.remove('table-cell-hovered');this.hoveredCell=cell;cell.classList.add('table-cell-hovered')}
